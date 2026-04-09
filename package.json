@@ -1,0 +1,20 @@
+{
+  "name": "kumaos",
+  "version": "0.1.0",
+  "description": "Simulador de Sistema Operativo Móvil con Electron y Firebase",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --inspect",
+    "lint": "eslint src/"
+  },
+  "keywords": ["electron", "os-simulator", "ecs", "firebase"],
+  "author": "KumaOS Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^29.0.0"
+  },
+  "dependencies": {
+    "firebase": "^10.11.0"
+  }
+}
