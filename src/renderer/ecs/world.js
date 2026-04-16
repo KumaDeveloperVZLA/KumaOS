@@ -1,20 +1,37 @@
-// import { Pearl } from 'pearl'; // Descomentar cuando pearl esté instalado/configurado correctamente
+import { World } from 'ape-ecs';
+import { AppManifest } from './components/AppManifest.js';
+import { ProcessState } from './components/ProcessState.js';
+import { UserSession } from './components/user.js';
+import { UIRenderSystem } from './systems/UIRenderSystem.js';
+import { CloudSyncSystem } from './systems/CloudSyncSystem.js';
 
-// Mocks simples para la funcionalidad de Pearl mientras no se dependa de la librería final,
-// o configurarlo correctamente si ya está.
+// Receives the authenticated Firebase User object.
+// Apps are no longer mock entities — they come from Firebase via CloudSyncSystem.
+export async function setupECS(user) {
+  console.log('[ECS] Initializing world for user:', user.uid);
 
-export async function setupECS() {
-  console.log("Setting up ECS World...");
-  
-  // const game = new Pearl.Game({}); // Instanciación de Pearl
-  /*
-  const world = game.world;
-  world.addSystem(new LifecycleSystem());
-  world.addSystem(new NotificationSystem());
-  */
+  const world = new World();
 
-  // Retornamos un mock o null por ahora hasta tener las clases bien definidas
-  return {
-    addEntity: (entity) => console.log("Added entity", entity)
-  };
+  // Register Components
+  world.registerComponent(AppManifest);
+  world.registerComponent(ProcessState);
+  world.registerComponent(UserSession);
+
+  // Register Systems
+  // 'sync' runs before 'render' so Firebase changes are reflected in the same frame
+  world.registerSystem('sync', CloudSyncSystem, [user.uid]);
+  world.registerSystem('render', UIRenderSystem);
+
+  // Global entity that holds the current user session
+  world.createEntity({
+    c: {
+      UserSession: {
+        uid: user.uid,
+        email: user.email || '',
+        status: 'online'
+      }
+    }
+  });
+
+  return world;
 }

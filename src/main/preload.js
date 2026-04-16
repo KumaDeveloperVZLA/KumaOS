@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('kumaAPI', {
+  // Firebase config — fetched from main process so credentials stay out of bundle.js
+  firebase: {
+    getConfig: () => ipcRenderer.invoke('firebase:getConfig')
+  },
+
   // Hardware capabilities
   camera: {
     takePhoto: () => ipcRenderer.invoke('hardware:camera:takePhoto'),

@@ -1,19 +1,22 @@
-export function renderDock(container) {
-  container.style.position = 'absolute';
-  container.style.bottom = '10px';
-  container.style.left = '50%';
-  container.style.transform = 'translateX(-50%)';
-  container.style.width = '90%';
-  container.style.height = '80px';
-  container.style.borderRadius = '24px';
-  container.classList.add('glass-panel'); // Usa la clase CSS de main.css
+let previousDockHTML = '';
 
-  container.innerHTML = `
-    <div style="display: flex; justify-content: space-around; align-items: center; height: 100%; padding: 0 10px;">
-      <div style="width: 50px; height: 50px; background: rgba(255,255,255,0.5); border-radius: 12px;"></div>
-      <div style="width: 50px; height: 50px; background: rgba(255,255,255,0.5); border-radius: 12px;"></div>
-      <div style="width: 50px; height: 50px; background: rgba(255,255,255,0.5); border-radius: 12px;"></div>
-      <div style="width: 50px; height: 50px; background: rgba(255,255,255,0.5); border-radius: 12px;"></div>
+export function renderDockApps(container, apps) {
+  const appsHTML = apps.map(app => `
+    <div onclick="console.log('Dock app clikeada: ${app.id}')" title="${app.name}" class="w-12 h-12 md:w-16 md:h-16 ${app.iconColorClass} rounded-xl transition-colors cursor-pointer shadow-sm"></div>
+  `).join('');
+
+  const fullHTML = `
+    <div class="glass-panel rounded-3xl mx-auto flex justify-center items-center gap-4 px-6 md:px-8 py-4 w-[90%] max-w-2xl shadow-2xl">
+      ${appsHTML || '<div class="text-white/50 text-sm">Empty</div>'}
     </div>
   `;
+
+  if (previousDockHTML !== fullHTML) {
+    container.innerHTML = fullHTML;
+    previousDockHTML = fullHTML;
+  }
+}
+
+export function renderDock(container) {
+  renderDockApps(container, []);
 }

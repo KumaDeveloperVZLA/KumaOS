@@ -1,7 +1,6 @@
-import { APP_STATES } from '../../../shared/AppStates.js'; // Ajustar ruta luego si es necesario
+import { Component } from 'ape-ecs';
 
-export class ProcessState {
-  constructor(initialState = 'BOOTING') { // Simular enum
-    this.state = initialState;
-  }
-}
+export class ProcessState extends Component {}
+ProcessState.properties = {
+  state: 'STOPPED' // 'STOPPED', 'BOOTING', 'RUNNING', 'MINIMIZED'
+};

@@ -1,6 +1,11 @@
-// src/firebase/auth.js
-// import { getAuth } from "firebase/auth";
-// import app from './firebaseConfig.js';
-// export const auth = getAuth(app);
+import { getAuth } from 'firebase/auth';
+import { getFirebaseApp } from './firebaseConfig.js';
 
-export const auth = {};
+let _auth = null;
+
+export async function getFirebaseAuth() {
+  if (_auth) return _auth;
+  const app = await getFirebaseApp();
+  _auth = getAuth(app);
+  return _auth;
+}

@@ -1,7 +1,9 @@
-export class AppManifest {
-  constructor({ name, icon, permissions }) {
-    this.name = name || "Unknown App";
-    this.icon = icon || "";
-    this.permissions = permissions || [];
-  }
-}
+import { Component } from 'ape-ecs';
+
+export class AppManifest extends Component {}
+AppManifest.properties = {
+  id: '',
+  name: 'Unknown App',
+  iconColorClass: 'bg-gray-500',
+  location: 'home', // 'home' or 'dock'
+};

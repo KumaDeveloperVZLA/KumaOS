@@ -4,17 +4,31 @@
   "description": "Simulador de Sistema Operativo Móvil con Electron y Firebase",
   "main": "src/main/main.js",
   "scripts": {
-    "start": "electron .",
-    "dev": "electron . --inspect",
+    "start": "npm run build:css && npm run build:js && concurrently \"npm run watch:css\" \"npm run watch:js\" \"electron .\"",
+    "dev": "npm run build:css && npm run build:js && concurrently \"npm run watch:css\" \"npm run watch:js\" \"electron . --inspect\"",
+    "build:css": "npx tailwindcss -i ./src/renderer/styles/input.css -o ./src/renderer/styles/main.css",
+    "watch:css": "npx tailwindcss -i ./src/renderer/styles/input.css -o ./src/renderer/styles/main.css --watch",
+    "build:js": "npx esbuild src/renderer/index.js --bundle --outfile=src/renderer/bundle.js",
+    "watch:js": "npx esbuild src/renderer/index.js --bundle --outfile=src/renderer/bundle.js --watch",
     "lint": "eslint src/"
   },
-  "keywords": ["electron", "os-simulator", "ecs", "firebase"],
+  "keywords": [
+    "electron",
+    "os-simulator",
+    "ecs",
+    "firebase"
+  ],
   "author": "KumaOS Team",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^29.0.0"
+    "concurrently": "^9.2.1",
+    "electron": "^29.0.0",
+    "esbuild": "^0.28.0",
+    "tailwindcss": "^3.4.1"
   },
   "dependencies": {
-    "firebase": "^10.11.0"
+    "ape-ecs": "^1.3.1",
+    "dotenv": "^17.4.2",
+    "firebase": "^10.14.1"
   }
 }

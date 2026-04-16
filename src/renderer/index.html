@@ -4,7 +4,18 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com" />
+    content="
+      default-src 'self';
+      script-src 'self';
+      style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+      font-src https://fonts.gstatic.com;
+      connect-src 'self'
+        https://identitytoolkit.googleapis.com
+        https://securetoken.googleapis.com
+        https://*.firebaseio.com
+        wss://*.firebaseio.com
+        https://*.googleapis.com;
+    " />
   <title>KumaOS</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -13,14 +24,7 @@
   <link rel="stylesheet" href="./styles/animations.css" />
 </head>
 <body>
-  <!-- Contenedor raíz del simulador de teléfono -->
-  <div id="phone-frame">
-    <div id="phone-screen">
-      <!-- La shell se monta aquí desde Shell.js -->
-      <div id="kuma-root"></div>
-    </div>
-  </div>
-
-  <script type="module" src="./index.js"></script>
+  <!-- Contenedor raíz del OS (Pantalla completa / Responsiva) -->
+  <div id="kuma-root" class="w-full h-full relative flex flex-col bg-os-wallpaper bg-cover bg-center overflow-hidden"></div>  <script src="./bundle.js"></script>
 </body>
 </html>

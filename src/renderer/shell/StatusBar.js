@@ -1,16 +1,4 @@
 export function renderStatusBar(container) {
-  container.style.position = 'absolute';
-  container.style.top = '0';
-  container.style.width = '100%';
-  container.style.padding = '12px 24px';
-  container.style.display = 'flex';
-  container.style.justifyContent = 'space-between';
-  container.style.alignItems = 'center';
-  container.style.color = 'white';
-  container.style.fontSize = '14px';
-  container.style.fontWeight = '500';
-  container.style.zIndex = '100';
-
   const updateTime = () => {
     const now = new Date();
     const timeString = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -19,11 +7,13 @@ export function renderStatusBar(container) {
   };
 
   container.innerHTML = `
-    <div class="time-display">--:--</div>
-    <div class="status-icons">
-        <span style="margin-right: 5px;">📶</span>
-        <span style="margin-right: 5px;">WiFi</span>
-        <span>🔋 100%</span>
+    <div class="flex justify-between items-center w-full px-6 py-3 text-white text-sm font-medium drop-shadow-md">
+      <div class="time-display">--:--</div>
+      <div class="flex items-center space-x-3">
+          <span>📶</span>
+          <span>WiFi</span>
+          <span>🔋 100%</span>
+      </div>
     </div>
   `;
 

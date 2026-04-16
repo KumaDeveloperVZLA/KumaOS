@@ -1,6 +1,11 @@
-// src/firebase/db.js
-// import { getDatabase } from "firebase/database";
-// import app from './firebaseConfig.js';
-// export const db = getDatabase(app);
+import { getDatabase } from 'firebase/database';
+import { getFirebaseApp } from './firebaseConfig.js';
 
-export const db = {};
+let _db = null;
+
+export async function getFirebaseDB() {
+  if (_db) return _db;
+  const app = await getFirebaseApp();
+  _db = getDatabase(app);
+  return _db;
+}

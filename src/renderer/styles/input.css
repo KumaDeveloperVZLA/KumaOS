@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --os-bg-color: #000;
+    --text-primary: #fff;
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --accent-color: #007aff;
+    --surface-color: rgba(255, 255, 255, 0.1);
+    --glass-bg: rgba(30, 30, 30, 0.65);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --blur-amount: 20px;
+  }
+
+  body {
+    @apply m-0 flex justify-center items-center h-screen overflow-hidden select-none bg-[#222] text-text-primary;
+    /* font-family resolves from tailwind config sans extending */
+  }
+}
+
+@layer components {
+  /* Glassmorphism Utilities */
+  .glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(var(--blur-amount));
+    -webkit-backdrop-filter: blur(var(--blur-amount));
+    border: 1px solid var(--glass-border);
+  }
+}

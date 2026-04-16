@@ -1,47 +1,27 @@
-export function renderHomeScreen(container) {
-  // Un grid sencillo para los íconos de las apps
-  container.innerHTML = `
-    <style>
-      .home-grid {
-        display: grid;
-        grid-template-columns: repeat(4, 1fr);
-        gap: 20px;
-        padding: 40px 20px;
-        height: 100%;
-      }
-      .app-icon {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        cursor: pointer;
-      }
-      .app-icon-img {
-        width: 60px;
-        height: 60px;
-        background: rgba(255,255,255,0.2);
-        border-radius: 14px;
-        margin-bottom: 5px;
-      }
-      .app-icon-label {
-        color: white;
-        font-size: 11px;
-        text-shadow: 0 1px 2px rgba(0,0,0,0.5);
-      }
-    </style>
-    <div class="home-grid">
-      <!-- Mocks de apps -->
-      <div class="app-icon" onclick="console.log('App clikeada')">
-        <div class="app-icon-img" style="background:#ff3b30"></div>
-        <span class="app-icon-label">Camera</span>
-      </div>
-      <div class="app-icon">
-        <div class="app-icon-img" style="background:#34c759"></div>
-        <span class="app-icon-label">Messages</span>
-      </div>
-       <div class="app-icon">
-        <div class="app-icon-img" style="background:#007aff"></div>
-        <span class="app-icon-label">Store</span>
-      </div>
+let previousHomeHTML = '';
+
+export function renderHomeScreenApps(container, apps) {
+  const appsHTML = apps.map(app => `
+    <div class="flex flex-col items-center cursor-pointer group transition-transform hover:scale-105" onclick="console.log('App clikeada: ${app.id}')">
+      <div class="w-16 h-16 sm:w-20 sm:h-20 ${app.iconColorClass} rounded-2xl shadow-lg border border-white/20 mb-2 transition-shadow group-hover:shadow-white/20"></div>
+      <span class="text-white text-xs sm:text-sm font-medium drop-shadow-md">${app.name}</span>
+    </div>
+  `).join('');
+
+  const fullHTML = `
+    <div class="w-full max-w-6xl px-10 flex-1 grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-6 md:gap-8 auto-rows-max items-start pt-10">
+      ${appsHTML}
     </div>
   `;
+
+  // Mini-optimización para no recrear el DOM cada tick a menos que cambie
+  if (previousHomeHTML !== fullHTML) {
+    container.innerHTML = fullHTML;
+    previousHomeHTML = fullHTML;
+  }
+}
+
+// Deprecado de la fase 1, pero exportado en caso de retrocompatibilidad
+export function renderHomeScreen(container) {
+  renderHomeScreenApps(container, []);
 }
