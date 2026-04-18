@@ -1,37 +1,46 @@
 import { World } from 'ape-ecs';
-import { AppManifest } from './components/AppManifest.js';
-import { ProcessState } from './components/ProcessState.js';
-import { UserSession } from './components/user.js';
-import { UIRenderSystem } from './systems/UIRenderSystem.js';
-import { CloudSyncSystem } from './systems/CloudSyncSystem.js';
+import { AppManifest }      from './components/AppManifest.js';
+import { ProcessState }     from './components/ProcessState.js';
+import { WindowTransform }  from './components/WindowTransform.js';
+import { UserSession }      from './components/user.js';
+import { UIRenderSystem }       from './systems/UIRenderSystem.js';
+import { CloudSyncSystem }      from './systems/CloudSyncSystem.js';
+import { WindowManagerSystem }  from './systems/WindowManagerSystem.js';
+import { startMessagesBackgroundSync } from '../../apps/messages/MessagesApp.js';
 
-// Receives the authenticated Firebase User object.
-// Apps are no longer mock entities — they come from Firebase via CloudSyncSystem.
+// Recibe el objeto Firebase User autenticado.
 export async function setupECS(user) {
   console.log('[ECS] Initializing world for user:', user.uid);
 
   const world = new World();
 
-  // Register Components
+  // ── Registrar Componentes ────────────────────────────────────────────────
   world.registerComponent(AppManifest);
   world.registerComponent(ProcessState);
+  world.registerComponent(WindowTransform);
   world.registerComponent(UserSession);
 
-  // Register Systems
-  // 'sync' runs before 'render' so Firebase changes are reflected in the same frame
-  world.registerSystem('sync', CloudSyncSystem, [user.uid]);
+  // ── Registrar Sistemas ───────────────────────────────────────────────────
+  // 'sync'   → CloudSyncSystem: Firebase RTDB → ECS entities
+  // 'render' → UIRenderSystem:  ECS → HomeScreen / Dock DOM
+  //            WindowManagerSystem: ECS ProcessState → app windows DOM
+  world.registerSystem('sync',   CloudSyncSystem,     [user.uid]);
   world.registerSystem('render', UIRenderSystem);
+  world.registerSystem('render', WindowManagerSystem, [user.uid]);
 
-  // Global entity that holds the current user session
+  // ── Entidad de sesión global ─────────────────────────────────────────────
   world.createEntity({
     c: {
       UserSession: {
-        uid: user.uid,
-        email: user.email || '',
+        uid:    user.uid,
+        email:  user.email || '',
         status: 'online'
       }
     }
   });
+
+  // ── Notificaciones en background (mensajes nuevos) ───────────────────────
+  await startMessagesBackgroundSync(user.uid);
 
   return world;
 }

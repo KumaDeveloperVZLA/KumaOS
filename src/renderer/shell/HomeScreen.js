@@ -1,9 +1,28 @@
+// HomeScreen.js — Fase 4
+// Los clicks en íconos ahora actualizan el ProcessState de la entidad a 'RUNNING'.
+
 let previousHomeHTML = '';
 
+/**
+ * @param {HTMLElement} container
+ * @param {Array<{id, name, iconColorClass, location, processState}>} apps
+ */
 export function renderHomeScreenApps(container, apps) {
-  const appsHTML = apps.map(app => `
-    <div class="flex flex-col items-center cursor-pointer group transition-transform hover:scale-105" onclick="console.log('App clikeada: ${app.id}')">
-      <div class="w-16 h-16 sm:w-20 sm:h-20 ${app.iconColorClass} rounded-2xl shadow-lg border border-white/20 mb-2 transition-shadow group-hover:shadow-white/20"></div>
+  // Ordenar por campo `order` si existe
+  const sorted = [...apps].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+
+  const appsHTML = sorted.map(app => `
+    <div
+      id="app-icon-${app.id}"
+      class="app-icon flex flex-col items-center cursor-pointer group transition-transform hover:scale-105"
+      data-app-id="${app.id}"
+      role="button"
+      tabindex="0"
+      aria-label="Abrir ${app.name}"
+    >
+      <div class="w-16 h-16 sm:w-20 sm:h-20 ${app.iconColorClass} rounded-2xl shadow-lg border border-white/20 mb-2 transition-shadow group-hover:shadow-white/20 flex items-center justify-center">
+        <span class="app-icon-glyph">${_appGlyph(app.id)}</span>
+      </div>
       <span class="text-white text-xs sm:text-sm font-medium drop-shadow-md">${app.name}</span>
     </div>
   `).join('');
@@ -14,14 +33,44 @@ export function renderHomeScreenApps(container, apps) {
     </div>
   `;
 
-  // Mini-optimización para no recrear el DOM cada tick a menos que cambie
   if (previousHomeHTML !== fullHTML) {
     container.innerHTML = fullHTML;
     previousHomeHTML = fullHTML;
+
+    // Adjuntar listeners de click para lanzar apps
+    sorted.forEach(app => {
+      const el = container.querySelector(`#app-icon-${app.id}`);
+      if (!el || !app.processState) return;
+
+      const launch = () => {
+        console.log(`[HomeScreen] Lanzando: ${app.id}`);
+        app.processState.update({ state: 'RUNNING' });
+      };
+
+      el.addEventListener('click', launch);
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') launch();
+      });
+    });
   }
 }
 
-// Deprecado de la fase 1, pero exportado en caso de retrocompatibilidad
+// Deprecado de la fase 1, mantenido para retrocompatibilidad
 export function renderHomeScreen(container) {
   renderHomeScreenApps(container, []);
+}
+
+// Emojis/glyphs para cada app conocida
+function _appGlyph(id) {
+  const glyphs = {
+    camera:   '📷',
+    messages: '💬',
+    gallery:  '🖼️',
+    store:    '🛍️',
+    phone:    '📞',
+    browser:  '🌐',
+    settings: '⚙️',
+    contacts: '👥',
+  };
+  return glyphs[id] || '📱';
 }

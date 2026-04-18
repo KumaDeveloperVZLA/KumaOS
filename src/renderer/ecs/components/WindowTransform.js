@@ -1,9 +1,10 @@
-export class WindowTransform {
-  constructor(x = 0, y = 0, width = 100, height = 100, zIndex = 0) {
-    this.x = x;
-    this.y = y;
-    this.width = width;
-    this.height = height;
-    this.zIndex = zIndex;
-  }
-}
+import { Component } from 'ape-ecs';
+
+// Componente ECS que describe el estado visual de la ventana de una app.
+// Dado que KumaOS es un simulador móvil, todas las ventanas son fullscreen.
+export class WindowTransform extends Component {}
+WindowTransform.properties = {
+  isOpen:     false,  // ¿Está la ventana visible?
+  zIndex:     10,     // Orden en el eje Z dentro del window-manager
+  fullscreen: true,   // Siempre true en el simulador móvil
+};

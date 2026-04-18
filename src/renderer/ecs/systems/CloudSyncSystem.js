@@ -1,23 +1,24 @@
 import { System } from 'ape-ecs';
-import { getFirebaseApp } from '../../../firebase/firebaseConfig.js';
+import { getFirebaseApp }  from '../../../firebase/firebaseConfig.js';
 import { getFirebaseAuth } from '../../../firebase/auth.js';
 
 // Default app layout written to Firebase on first login.
 const DEFAULT_APPS = {
-  camera:   { name: 'Camera',   iconColorClass: 'bg-red-500 shadow-red-500/50',    location: 'home', order: 0, enabled: true },
-  messages: { name: 'Messages', iconColorClass: 'bg-green-500 shadow-green-500/50', location: 'home', order: 1, enabled: true },
-  store:    { name: 'Store',    iconColorClass: 'bg-blue-500 shadow-blue-500/50',   location: 'home', order: 2, enabled: true },
+  camera:   { name: 'Camera',   iconColorClass: 'bg-red-500 shadow-red-500/50',      location: 'home', order: 0, enabled: true },
+  messages: { name: 'Messages', iconColorClass: 'bg-green-500 shadow-green-500/50',  location: 'home', order: 1, enabled: true },
+  gallery:  { name: 'Gallery',  iconColorClass: 'bg-purple-500 shadow-purple-500/50', location: 'home', order: 2, enabled: true },
+  store:    { name: 'Store',    iconColorClass: 'bg-blue-500 shadow-blue-500/50',     location: 'home', order: 3, enabled: true },
   phone:    { name: 'Phone',    iconColorClass: 'bg-white/50', location: 'dock', order: 0, enabled: true },
   browser:  { name: 'Browser',  iconColorClass: 'bg-white/50', location: 'dock', order: 1, enabled: true },
   settings: { name: 'Settings', iconColorClass: 'bg-white/50', location: 'dock', order: 2, enabled: true },
-  contacts: { name: 'Contacts', iconColorClass: 'bg-white/50', location: 'dock', order: 3, enabled: true }
+  contacts: { name: 'Contacts', iconColorClass: 'bg-white/50', location: 'dock', order: 3, enabled: true },
 };
 
 export class CloudSyncSystem extends System {
   init(uid) {
-    this.uid = uid;
+    this.uid       = uid;
     this.syncActive = false;
-    this.entityMap = new Map();
+    this.entityMap  = new Map();
   }
 
   update(tick) {
@@ -32,19 +33,16 @@ export class CloudSyncSystem extends System {
     this._syncToECS(DEFAULT_APPS);
 
     try {
-      // Obtener la URL de la base de datos desde la config de Firebase
-      const app  = await getFirebaseApp();
+      const app   = await getFirebaseApp();
       const dbUrl = app.options.databaseURL;
       if (!dbUrl) throw new Error('databaseURL no encontrado en la configuración de Firebase.');
 
-      // Obtener el token de autenticación del usuario actual
       const auth = await getFirebaseAuth();
       if (!auth.currentUser) throw new Error('No hay usuario autenticado.');
       const token = await auth.currentUser.getIdToken();
 
       const base = `${dbUrl.replace(/\/$/, '')}/users/${this.uid}/desktop/apps.json?auth=${token}`;
 
-      // --- LEER datos del usuario ---
       const readRes = await fetch(base);
       if (!readRes.ok) throw new Error(`HTTP ${readRes.status} — verifica las Reglas de RTDB en Firebase Console.`);
 
@@ -59,17 +57,17 @@ export class CloudSyncSystem extends System {
         });
         if (!writeRes.ok) throw new Error(`Escritura fallida HTTP ${writeRes.status}.`);
         console.log('[CloudSync] Layout por defecto escrito para nuevo usuario.');
-        // El fallback ya muestra DEFAULT_APPS
       } else {
-        // Usuario existente: sobreescribir fallback con datos reales
-        this._syncToECS(data);
-        console.log('[CloudSync] Layout cargado desde Firebase RTDB.');
+        // Usuario existente: MERGE con DEFAULT_APPS para que apps nuevas
+        // (añadidas en fases posteriores) no desaparezcan para usuarios ya registrados.
+        const merged = { ...DEFAULT_APPS, ...data };
+        this._syncToECS(merged);
+        console.log('[CloudSync] Layout cargado y mergeado desde Firebase RTDB.');
       }
 
     } catch (err) {
       console.error('[CloudSync] Error de RTDB:', err.message);
       this._showError(err.message);
-      // El fallback DEFAULT_APPS sigue activo
     }
   }
 
@@ -90,7 +88,7 @@ export class CloudSyncSystem extends System {
   _syncToECS(appsData) {
     const incoming = new Set(Object.keys(appsData));
 
-    // Eliminar entidades que ya no están o están deshabilitadas
+    // Eliminar entidades obsoletas o deshabilitadas
     for (const [appId, entity] of this.entityMap) {
       if (!incoming.has(appId) || !appsData[appId].enabled) {
         entity.destroy();
@@ -103,6 +101,7 @@ export class CloudSyncSystem extends System {
       if (!appData.enabled) continue;
 
       if (this.entityMap.has(appId)) {
+        // Actualizar manifiesto
         const manifest = this.entityMap.get(appId).c.AppManifest;
         if (manifest) {
           manifest.update({
@@ -112,6 +111,7 @@ export class CloudSyncSystem extends System {
           });
         }
       } else {
+        // Crear nueva entidad con AppManifest + ProcessState + WindowTransform
         const entity = this.world.createEntity({
           c: {
             AppManifest: {
@@ -119,6 +119,14 @@ export class CloudSyncSystem extends System {
               name:           appData.name,
               iconColorClass: appData.iconColorClass,
               location:       appData.location
+            },
+            ProcessState: {
+              state: 'STOPPED'
+            },
+            WindowTransform: {
+              isOpen:     false,
+              zIndex:     10,
+              fullscreen: true
             }
           }
         });

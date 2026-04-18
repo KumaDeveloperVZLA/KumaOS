@@ -26,10 +26,20 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
+  // Conceder permiso de cámara automáticamente (el OS simulado lo requiere).
+  // El usuario ya autorizó el uso de la cámara al instalar la app.
+  mainWindow.webContents.session.setPermissionRequestHandler(
+    (webContents, permission, callback) => {
+      const allowedPermissions = ['media', 'mediaKeySystem', 'camera'];
+      callback(allowedPermissions.includes(permission));
+    }
+  );
+
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
+
 
 app.on('window-all-closed', function () {
   if (process.platform !== 'darwin') app.quit();

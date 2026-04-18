@@ -207,7 +207,7 @@
     "node_modules/ape-ecs/src/component.js"(exports, module) {
       var Util = require_util();
       var idGen = new Util.IdGenerator();
-      var Component5 = class {
+      var Component6 = class {
         constructor(world) {
           this.world = world;
           this._meta = {
@@ -386,13 +386,13 @@
           );
         }
       };
-      Component5.properties = {};
-      Component5.serialize = true;
-      Component5.serializeFields = null;
-      Component5.skipSerializeFields = null;
-      Component5.subbed = false;
-      Component5.registered = false;
-      module.exports = Component5;
+      Component6.properties = {};
+      Component6.serialize = true;
+      Component6.serializeFields = null;
+      Component6.skipSerializeFields = null;
+      Component6.subbed = false;
+      Component6.registered = false;
+      module.exports = Component6;
     }
   });
 
@@ -997,7 +997,7 @@
   var require_system = __commonJS({
     "node_modules/ape-ecs/src/system.js"(exports, module) {
       var Query = require_query();
-      var System3 = class {
+      var System4 = class {
         constructor(world, ...initArgs) {
           this.world = world;
           this._stagedChanges = [];
@@ -1042,15 +1042,15 @@
           this._stagedChanges.push(change);
         }
       };
-      module.exports = System3;
+      module.exports = System4;
     }
   });
 
   // node_modules/ape-ecs/src/cleanup.js
   var require_cleanup = __commonJS({
     "node_modules/ape-ecs/src/cleanup.js"(exports, module) {
-      var System3 = require_system();
-      var CleanupApeDestroySystem = class extends System3 {
+      var System4 = require_system();
+      var CleanupApeDestroySystem = class extends System4 {
         init() {
           this.destroyQuery = this.createQuery({ includeApeDestroy: true }).fromAll("ApeDestroy").persist();
         }
@@ -1460,11 +1460,18 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
   function mountShell(rootElement) {
     const shellHTML = `
     <div id="status-bar-container" class="absolute top-0 w-full z-50"></div>
-    <!-- HomeScreen ya no auto-renderiza hardcode. Se renderizar\xE1 por el ECS. -->
+
+    <!-- HomeScreen: renderizado por UIRenderSystem -->
     <div id="home-screen-container" class="w-full h-full flex flex-col items-center justify-center"></div>
+
+    <!-- Dock inferior -->
     <div id="dock-container" class="absolute bottom-6 w-full flex justify-center z-40"></div>
-    <!-- \xC1reas din\xE1micas como ventanas o notificaciones ir\xE1n aqu\xED -->
+
+    <!-- WindowManager: ventanas fullscreen de apps nativas (gestiona WindowManagerSystem) -->
     <div id="window-manager" class="absolute inset-0 pointer-events-none z-30"></div>
+
+    <!-- Toasts de notificaci\xF3n: gestionados por ToastManager -->
+    <div id="toast-container" class="toast-container"></div>
   `;
     rootElement.innerHTML = shellHTML;
     const statusBarContainer = document.getElementById("status-bar-container");
@@ -9041,7 +9048,7 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
   }
 
   // src/renderer/ecs/world.js
-  var import_ape_ecs6 = __toESM(require_src());
+  var import_ape_ecs8 = __toESM(require_src());
 
   // src/renderer/ecs/components/AppManifest.js
   var import_ape_ecs = __toESM(require_src());
@@ -9064,9 +9071,22 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     // 'STOPPED', 'BOOTING', 'RUNNING', 'MINIMIZED'
   };
 
-  // src/renderer/ecs/components/user.js
+  // src/renderer/ecs/components/WindowTransform.js
   var import_ape_ecs3 = __toESM(require_src());
-  var UserSession = class extends import_ape_ecs3.Component {
+  var WindowTransform = class extends import_ape_ecs3.Component {
+  };
+  WindowTransform.properties = {
+    isOpen: false,
+    // ¿Está la ventana visible?
+    zIndex: 10,
+    // Orden en el eje Z dentro del window-manager
+    fullscreen: true
+    // Siempre true en el simulador móvil
+  };
+
+  // src/renderer/ecs/components/user.js
+  var import_ape_ecs4 = __toESM(require_src());
+  var UserSession = class extends import_ape_ecs4.Component {
   };
   UserSession.properties = {
     uid: "",
@@ -9076,14 +9096,24 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
   };
 
   // src/renderer/ecs/systems/UIRenderSystem.js
-  var import_ape_ecs4 = __toESM(require_src());
+  var import_ape_ecs5 = __toESM(require_src());
 
   // src/renderer/shell/HomeScreen.js
   var previousHomeHTML = "";
   function renderHomeScreenApps(container, apps) {
-    const appsHTML = apps.map((app) => `
-    <div class="flex flex-col items-center cursor-pointer group transition-transform hover:scale-105" onclick="console.log('App clikeada: ${app.id}')">
-      <div class="w-16 h-16 sm:w-20 sm:h-20 ${app.iconColorClass} rounded-2xl shadow-lg border border-white/20 mb-2 transition-shadow group-hover:shadow-white/20"></div>
+    const sorted = [...apps].sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+    const appsHTML = sorted.map((app) => `
+    <div
+      id="app-icon-${app.id}"
+      class="app-icon flex flex-col items-center cursor-pointer group transition-transform hover:scale-105"
+      data-app-id="${app.id}"
+      role="button"
+      tabindex="0"
+      aria-label="Abrir ${app.name}"
+    >
+      <div class="w-16 h-16 sm:w-20 sm:h-20 ${app.iconColorClass} rounded-2xl shadow-lg border border-white/20 mb-2 transition-shadow group-hover:shadow-white/20 flex items-center justify-center">
+        <span class="app-icon-glyph">${_appGlyph(app.id)}</span>
+      </div>
       <span class="text-white text-xs sm:text-sm font-medium drop-shadow-md">${app.name}</span>
     </div>
   `).join("");
@@ -9095,7 +9125,32 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     if (previousHomeHTML !== fullHTML) {
       container.innerHTML = fullHTML;
       previousHomeHTML = fullHTML;
+      sorted.forEach((app) => {
+        const el = container.querySelector(`#app-icon-${app.id}`);
+        if (!el || !app.processState) return;
+        const launch = () => {
+          console.log(`[HomeScreen] Lanzando: ${app.id}`);
+          app.processState.update({ state: "RUNNING" });
+        };
+        el.addEventListener("click", launch);
+        el.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") launch();
+        });
+      });
     }
+  }
+  function _appGlyph(id) {
+    const glyphs = {
+      camera: "\u{1F4F7}",
+      messages: "\u{1F4AC}",
+      gallery: "\u{1F5BC}\uFE0F",
+      store: "\u{1F6CD}\uFE0F",
+      phone: "\u{1F4DE}",
+      browser: "\u{1F310}",
+      settings: "\u2699\uFE0F",
+      contacts: "\u{1F465}"
+    };
+    return glyphs[id] || "\u{1F4F1}";
   }
 
   // src/renderer/shell/Dock.js
@@ -9116,9 +9171,9 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
   }
 
   // src/renderer/ecs/systems/UIRenderSystem.js
-  var UIRenderSystem = class extends import_ape_ecs4.System {
+  var UIRenderSystem = class extends import_ape_ecs5.System {
     init() {
-      this.appQuery = this.createQuery().fromAll(AppManifest).persist();
+      this.appQuery = this.createQuery().fromAll(AppManifest, ProcessState).persist();
     }
     update(tick) {
       const entities = this.appQuery.execute();
@@ -9126,35 +9181,41 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
       const dockApps = [];
       for (const entity of entities) {
         const manifest = entity.c.AppManifest;
+        const proc = entity.c.ProcessState;
+        const appData = {
+          id: manifest.id,
+          name: manifest.name,
+          iconColorClass: manifest.iconColorClass,
+          location: manifest.location,
+          // Referencia al componente ProcessState para actualizarlo al hacer click
+          processState: proc
+        };
         if (manifest.location === "home") {
-          homeApps.push(manifest);
+          homeApps.push(appData);
         } else if (manifest.location === "dock") {
-          dockApps.push(manifest);
+          dockApps.push(appData);
         }
       }
       const homeContainer = document.getElementById("home-screen-container");
       const dockContainer = document.getElementById("dock-container");
-      if (homeContainer) {
-        renderHomeScreenApps(homeContainer, homeApps);
-      }
-      if (dockContainer) {
-        renderDockApps(dockContainer, dockApps);
-      }
+      if (homeContainer) renderHomeScreenApps(homeContainer, homeApps);
+      if (dockContainer) renderDockApps(dockContainer, dockApps);
     }
   };
 
   // src/renderer/ecs/systems/CloudSyncSystem.js
-  var import_ape_ecs5 = __toESM(require_src());
+  var import_ape_ecs6 = __toESM(require_src());
   var DEFAULT_APPS = {
     camera: { name: "Camera", iconColorClass: "bg-red-500 shadow-red-500/50", location: "home", order: 0, enabled: true },
     messages: { name: "Messages", iconColorClass: "bg-green-500 shadow-green-500/50", location: "home", order: 1, enabled: true },
-    store: { name: "Store", iconColorClass: "bg-blue-500 shadow-blue-500/50", location: "home", order: 2, enabled: true },
+    gallery: { name: "Gallery", iconColorClass: "bg-purple-500 shadow-purple-500/50", location: "home", order: 2, enabled: true },
+    store: { name: "Store", iconColorClass: "bg-blue-500 shadow-blue-500/50", location: "home", order: 3, enabled: true },
     phone: { name: "Phone", iconColorClass: "bg-white/50", location: "dock", order: 0, enabled: true },
     browser: { name: "Browser", iconColorClass: "bg-white/50", location: "dock", order: 1, enabled: true },
     settings: { name: "Settings", iconColorClass: "bg-white/50", location: "dock", order: 2, enabled: true },
     contacts: { name: "Contacts", iconColorClass: "bg-white/50", location: "dock", order: 3, enabled: true }
   };
-  var CloudSyncSystem = class extends import_ape_ecs5.System {
+  var CloudSyncSystem = class extends import_ape_ecs6.System {
     init(uid) {
       this.uid = uid;
       this.syncActive = false;
@@ -9188,8 +9249,9 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
           if (!writeRes.ok) throw new Error(`Escritura fallida HTTP ${writeRes.status}.`);
           console.log("[CloudSync] Layout por defecto escrito para nuevo usuario.");
         } else {
-          this._syncToECS(data);
-          console.log("[CloudSync] Layout cargado desde Firebase RTDB.");
+          const merged = { ...DEFAULT_APPS, ...data };
+          this._syncToECS(merged);
+          console.log("[CloudSync] Layout cargado y mergeado desde Firebase RTDB.");
         }
       } catch (err) {
         console.error("[CloudSync] Error de RTDB:", err.message);
@@ -9236,6 +9298,14 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
                 name: appData.name,
                 iconColorClass: appData.iconColorClass,
                 location: appData.location
+              },
+              ProcessState: {
+                state: "STOPPED"
+              },
+              WindowTransform: {
+                isOpen: false,
+                zIndex: 10,
+                fullscreen: true
               }
             }
           });
@@ -9245,15 +9315,504 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     }
   };
 
+  // src/renderer/ecs/systems/WindowManagerSystem.js
+  var import_ape_ecs7 = __toESM(require_src());
+
+  // src/firebase/rtdbREST.js
+  async function _buildUrl(path) {
+    const app = await getFirebaseApp();
+    const auth = await getFirebaseAuth();
+    const dbUrl = app.options.databaseURL;
+    if (!dbUrl) throw new Error("[rtdbREST] databaseURL no encontrado en la config de Firebase.");
+    if (!auth.currentUser) throw new Error("[rtdbREST] No hay usuario autenticado.");
+    const token = await auth.currentUser.getIdToken();
+    const clean = dbUrl.replace(/\/$/, "");
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    return `${clean}${cleanPath}.json?auth=${token}`;
+  }
+  async function rtdbGet(path) {
+    const url = await _buildUrl(path);
+    const res = await fetch(url);
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`rtdbGet HTTP ${res.status}: ${body}`);
+    }
+    return res.json();
+  }
+  async function rtdbPost(path, data) {
+    const url = await _buildUrl(path);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`rtdbPost HTTP ${res.status}: ${body}`);
+    }
+    return res.json();
+  }
+  function rtdbListen(path, callback, errorCallback, intervalMs = 2e3) {
+    let active = true;
+    let errorFired = false;
+    async function poll() {
+      if (!active) return;
+      try {
+        const data = await rtdbGet(path);
+        if (active) callback(data);
+        errorFired = false;
+      } catch (err) {
+        console.error("[rtdbListen] poll error:", err.message);
+        if (active && !errorFired && errorCallback) {
+          errorFired = true;
+          errorCallback(err);
+        }
+      }
+      if (active) setTimeout(poll, intervalMs);
+    }
+    poll();
+    return () => {
+      active = false;
+    };
+  }
+
+  // src/apps/camera/CameraApp.js
+  var _stream = null;
+  async function mountCameraApp(container, uid) {
+    container.innerHTML = buildCameraUI();
+    const video = container.querySelector("#camera-video");
+    const canvas = container.querySelector("#camera-canvas");
+    const snapBtn = container.querySelector("#camera-snap-btn");
+    const flashEl = container.querySelector("#camera-flash");
+    const statusEl = container.querySelector("#camera-status");
+    try {
+      _stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user", width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: false
+      });
+      video.srcObject = _stream;
+      video.play();
+    } catch (err) {
+      statusEl.textContent = `\u26A0\uFE0F C\xE1mara no disponible: ${err.message}`;
+      statusEl.style.display = "block";
+      snapBtn.disabled = true;
+      console.error("[CameraApp] getUserMedia error:", err);
+      return;
+    }
+    snapBtn.addEventListener("click", async () => {
+      flashEl.classList.add("camera-flash--active");
+      setTimeout(() => flashEl.classList.remove("camera-flash--active"), 350);
+      snapBtn.disabled = true;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      canvas.getContext("2d").drawImage(video, 0, 0);
+      const dataURL = canvas.toDataURL("image/jpeg", 0.7);
+      try {
+        await rtdbPost(`users/${uid}/gallery`, {
+          dataURL,
+          timestamp: Date.now(),
+          uid
+        });
+        console.log("[CameraApp] Foto guardada en Firebase RTDB.");
+        _showSavedBadge(container);
+      } catch (err) {
+        console.error("[CameraApp] Error guardando foto:", err.message);
+        statusEl.textContent = `\u26A0\uFE0F Error al guardar: ${err.message}`;
+        statusEl.style.display = "block";
+      } finally {
+        snapBtn.disabled = false;
+      }
+    });
+  }
+  function unmountCameraApp(container) {
+    if (_stream) {
+      _stream.getTracks().forEach((track) => track.stop());
+      _stream = null;
+    }
+    container.innerHTML = "";
+  }
+  function buildCameraUI() {
+    return `
+    <div class="camera-app">
+      <div class="camera-flash" id="camera-flash"></div>
+
+      <video
+        id="camera-video"
+        class="camera-video"
+        autoplay
+        muted
+        playsinline
+      ></video>
+
+      <canvas id="camera-canvas" style="display:none;"></canvas>
+
+      <div class="camera-controls">
+        <button id="camera-snap-btn" class="camera-snap-btn" aria-label="Tomar foto">
+          <span class="camera-snap-icon"></span>
+        </button>
+      </div>
+
+      <p id="camera-status" class="camera-status" style="display:none;"></p>
+    </div>
+  `;
+  }
+  function _showSavedBadge(container) {
+    const badge = document.createElement("div");
+    badge.className = "camera-saved-badge";
+    badge.textContent = "\u2713 Foto guardada";
+    container.querySelector(".camera-app").appendChild(badge);
+    setTimeout(() => badge.remove(), 2e3);
+  }
+
+  // src/renderer/shell/ToastManager.js
+  var TOAST_DURATION = 4e3;
+  function showToast(message, type = "info") {
+    const container = _getOrCreateContainer();
+    const toast = document.createElement("div");
+    toast.className = `toast toast--${type}`;
+    toast.innerHTML = `<span class="toast-msg">${message}</span>`;
+    container.appendChild(toast);
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => toast.classList.add("toast--visible"));
+    });
+    const remove = () => {
+      toast.classList.remove("toast--visible");
+      toast.addEventListener("transitionend", () => toast.remove(), { once: true });
+    };
+    toast.addEventListener("click", remove);
+    setTimeout(remove, TOAST_DURATION);
+  }
+  function _getOrCreateContainer() {
+    let container = document.getElementById("toast-container");
+    if (!container) {
+      container = document.createElement("div");
+      container.id = "toast-container";
+      document.body.appendChild(container);
+    }
+    return container;
+  }
+
+  // src/apps/messages/MessagesApp.js
+  var MESSAGES_PATH = "messages/global";
+  var _unsubscribeFg = null;
+  var _unsubscribeBg = null;
+  var _bgInitialized = false;
+  var _appMounted = false;
+  var _lastMsgCount = 0;
+  async function startMessagesBackgroundSync(uid) {
+    if (_bgInitialized) return;
+    _bgInitialized = true;
+    let firstLoad = true;
+    _unsubscribeBg = rtdbListen(
+      MESSAGES_PATH,
+      (data) => {
+        const msgs = data ? Object.values(data) : [];
+        const count = msgs.length;
+        if (firstLoad) {
+          firstLoad = false;
+          _lastMsgCount = count;
+          return;
+        }
+        if (_appMounted) {
+          _lastMsgCount = count;
+          return;
+        }
+        if (count > _lastMsgCount) {
+          const newMsgs = msgs.slice(_lastMsgCount);
+          newMsgs.forEach((msg) => {
+            if (msg.uid !== uid) {
+              showToast(`\u{1F4AC} ${msg.displayName || "Alguien"}: ${msg.text}`);
+            }
+          });
+          _lastMsgCount = count;
+        }
+      },
+      (err) => {
+        console.error("[MessagesApp][BG] Error en background sync:", err.message);
+      },
+      3e3
+      // Polling cada 3s en background (menos agresivo)
+    );
+    console.log("[MessagesApp] Background sync iniciado (REST polling).");
+  }
+  async function mountMessagesApp(container, uid) {
+    _appMounted = true;
+    container.innerHTML = buildMessagesUI();
+    const listEl = container.querySelector("#messages-list");
+    const input = container.querySelector("#messages-input");
+    const sendBtn = container.querySelector("#messages-send-btn");
+    let prevCount = -1;
+    _unsubscribeFg = rtdbListen(
+      MESSAGES_PATH,
+      (data) => {
+        if (!data) {
+          if (prevCount !== 0) {
+            listEl.innerHTML = '<p class="messages-empty">No hay mensajes a\xFAn. \xA1S\xE9 el primero!</p>';
+            prevCount = 0;
+          }
+          return;
+        }
+        const messages = Object.entries(data).map(([key, val]) => ({ key, ...val })).sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        if (messages.length === prevCount) return;
+        prevCount = messages.length;
+        _lastMsgCount = messages.length;
+        listEl.innerHTML = messages.map((msg) => `
+        <div class="message-bubble ${msg.uid === uid ? "message-bubble--own" : "message-bubble--other"}">
+          ${msg.uid !== uid ? `<span class="message-author">${msg.displayName || "An\xF3nimo"}</span>` : ""}
+          <p class="message-text">${escapeHTML(msg.text)}</p>
+          <span class="message-time">${msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+        </div>
+      `).join("");
+        listEl.scrollTop = listEl.scrollHeight;
+      },
+      (err) => {
+        console.error("[MessagesApp] Error de RTDB:", err.message);
+        listEl.innerHTML = `
+        <div class="messages-rtdb-error">
+          <b>\u{1F534} Error de Firebase RTDB</b><br/>
+          ${err.message}<br/>
+          <small>Verifica tu conexi\xF3n y las reglas de seguridad de RTDB.</small>
+        </div>
+      `;
+      },
+      2e3
+      // Polling cada 2s dentro de la app (sensación de tiempo real)
+    );
+    const sendMessage = async () => {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      sendBtn.disabled = true;
+      try {
+        await rtdbPost(MESSAGES_PATH, {
+          uid,
+          displayName: uid.slice(0, 8),
+          text,
+          timestamp: Date.now()
+        });
+      } catch (err) {
+        console.error("[MessagesApp] Error enviando mensaje:", err.message);
+        input.value = text;
+      } finally {
+        sendBtn.disabled = false;
+        input.focus();
+      }
+    };
+    sendBtn.addEventListener("click", sendMessage);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+  }
+  function unmountMessagesApp(container) {
+    _appMounted = false;
+    if (typeof _unsubscribeFg === "function") {
+      _unsubscribeFg();
+      _unsubscribeFg = null;
+    }
+    container.innerHTML = "";
+  }
+  function buildMessagesUI() {
+    return `
+    <div class="messages-app">
+      <div class="messages-header">
+        <span class="messages-header-icon">\u{1F4AC}</span>
+        <span>Chat Global</span>
+      </div>
+      <div id="messages-list" class="messages-list">
+        <p class="messages-empty">Conectando\u2026</p>
+      </div>
+      <div class="messages-input-row">
+        <input
+          id="messages-input"
+          type="text"
+          class="messages-input"
+          placeholder="Escribe un mensaje\u2026"
+          maxlength="500"
+          autocomplete="off"
+        />
+        <button id="messages-send-btn" class="messages-send-btn" aria-label="Enviar">
+          \u27A4
+        </button>
+      </div>
+    </div>
+  `;
+  }
+  function escapeHTML(str) {
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  }
+
+  // src/apps/gallery/GalleryApp.js
+  var _unsubscribe = null;
+  function mountGalleryApp(container, uid) {
+    container.innerHTML = buildGalleryShell();
+    const grid = container.querySelector("#gallery-grid");
+    const emptyEl = container.querySelector("#gallery-empty");
+    let prevCount = -1;
+    _unsubscribe = rtdbListen(
+      `users/${uid}/gallery`,
+      (data) => {
+        if (!data) {
+          if (prevCount !== 0) {
+            grid.innerHTML = "";
+            emptyEl.style.display = "flex";
+            prevCount = 0;
+          }
+          return;
+        }
+        const photos = Object.entries(data).map(([key, val]) => ({ key, ...val })).sort((a, b) => b.timestamp - a.timestamp);
+        if (photos.length === prevCount) return;
+        prevCount = photos.length;
+        emptyEl.style.display = "none";
+        grid.innerHTML = photos.map((photo) => `
+        <div class="gallery-item" title="${new Date(photo.timestamp).toLocaleString()}">
+          <img
+            src="${photo.dataURL}"
+            alt="Foto ${new Date(photo.timestamp).toLocaleTimeString()}"
+            class="gallery-img"
+            loading="lazy"
+          />
+          <div class="gallery-item-overlay">
+            <span>${new Date(photo.timestamp).toLocaleTimeString()}</span>
+          </div>
+        </div>
+      `).join("");
+      },
+      (err) => {
+        console.error("[GalleryApp] RTDB error:", err.message);
+        grid.innerHTML = `<p class="gallery-error">\u26A0\uFE0F Error: ${err.message}</p>`;
+      },
+      4e3
+      // Polling cada 4s (fotos cambian menos seguido)
+    );
+  }
+  function unmountGalleryApp(container) {
+    if (typeof _unsubscribe === "function") {
+      _unsubscribe();
+      _unsubscribe = null;
+    }
+    container.innerHTML = "";
+  }
+  function buildGalleryShell() {
+    return `
+    <div class="gallery-app">
+      <div id="gallery-grid" class="gallery-grid"></div>
+      <div id="gallery-empty" class="gallery-empty" style="display:flex;">
+        <span class="gallery-empty-icon">\u{1F5BC}\uFE0F</span>
+        <p>No hay fotos todav\xEDa.</p>
+        <p style="opacity:0.5;font-size:0.8rem;">Abre la C\xE1mara y toma una foto.</p>
+      </div>
+    </div>
+  `;
+  }
+
+  // src/renderer/ecs/systems/WindowManagerSystem.js
+  var APP_MOUNTS = {
+    camera: { mount: mountCameraApp, unmount: unmountCameraApp },
+    messages: { mount: mountMessagesApp, unmount: unmountMessagesApp },
+    gallery: { mount: mountGalleryApp, unmount: unmountGalleryApp }
+  };
+  var WindowManagerSystem = class extends import_ape_ecs7.System {
+    init(uid) {
+      this.uid = uid;
+      this.appQuery = this.createQuery().fromAll(AppManifest, ProcessState, WindowTransform).persist();
+      this.mountedWindows = /* @__PURE__ */ new Map();
+    }
+    update(tick) {
+      const container = document.getElementById("window-manager");
+      if (!container) return;
+      const entities = this.appQuery.execute();
+      for (const entity of entities) {
+        const manifest = entity.c.AppManifest;
+        const proc = entity.c.ProcessState;
+        const win = entity.c.WindowTransform;
+        const appId = manifest.id;
+        const isRunning = proc.state === "RUNNING";
+        if (isRunning && !this.mountedWindows.has(appId)) {
+          win.update({ isOpen: true });
+          const windowEl = this._createWindowShell(appId, manifest.name, proc, container);
+          this.mountedWindows.set(appId, windowEl);
+          const handler = APP_MOUNTS[appId];
+          if (handler) {
+            const contentEl = windowEl.querySelector(".app-content");
+            handler.mount(contentEl, this.uid);
+          }
+          requestAnimationFrame(
+            () => requestAnimationFrame(() => windowEl.classList.add("app-window--open"))
+          );
+        } else if (!isRunning && this.mountedWindows.has(appId)) {
+          win.update({ isOpen: false });
+          this._closeWindow(appId);
+        }
+      }
+      this._syncShellVisibility(container);
+    }
+    // ── Shell visibility (dock, status bar, window-manager z-index) ────────────
+    _syncShellVisibility(container) {
+      const hasOpenWindows = this.mountedWindows.size > 0;
+      const dock = document.getElementById("dock-container");
+      const statusBar = document.getElementById("status-bar-container");
+      if (hasOpenWindows) {
+        container.style.pointerEvents = "auto";
+        container.style.zIndex = "60";
+        if (dock) dock.style.display = "none";
+        if (statusBar) statusBar.style.display = "none";
+      } else {
+        container.style.pointerEvents = "none";
+        container.style.zIndex = "30";
+        if (dock) dock.style.display = "";
+        if (statusBar) statusBar.style.display = "";
+      }
+    }
+    // ── Helpers ────────────────────────────────────────────────────────────────
+    _createWindowShell(appId, appName, procComponent, container) {
+      const el = document.createElement("div");
+      el.id = `window-${appId}`;
+      el.className = "app-window";
+      el.dataset.appId = appId;
+      el.innerHTML = `
+      <div class="app-window__header">
+        <span class="app-window__title">${appName}</span>
+        <button
+          id="close-btn-${appId}"
+          class="app-window__close-btn"
+          aria-label="Cerrar ${appName}"
+        >\u2715</button>
+      </div>
+      <div class="app-content"></div>
+    `;
+      el.querySelector(`#close-btn-${appId}`).addEventListener("click", () => {
+        procComponent.update({ state: "STOPPED" });
+      });
+      container.appendChild(el);
+      return el;
+    }
+    _closeWindow(appId) {
+      const el = this.mountedWindows.get(appId);
+      if (!el) return;
+      const handler = APP_MOUNTS[appId];
+      if (handler) handler.unmount(el.querySelector(".app-content"));
+      el.classList.remove("app-window--open");
+      const onEnd = () => el.remove();
+      el.addEventListener("transitionend", onEnd, { once: true });
+      setTimeout(onEnd, 400);
+      this.mountedWindows.delete(appId);
+    }
+  };
+
   // src/renderer/ecs/world.js
   async function setupECS(user) {
     console.log("[ECS] Initializing world for user:", user.uid);
-    const world = new import_ape_ecs6.World();
+    const world = new import_ape_ecs8.World();
     world.registerComponent(AppManifest);
     world.registerComponent(ProcessState);
+    world.registerComponent(WindowTransform);
     world.registerComponent(UserSession);
     world.registerSystem("sync", CloudSyncSystem, [user.uid]);
     world.registerSystem("render", UIRenderSystem);
+    world.registerSystem("render", WindowManagerSystem, [user.uid]);
     world.createEntity({
       c: {
         UserSession: {
@@ -9263,6 +9822,7 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
         }
       }
     });
+    await startMessagesBackgroundSync(user.uid);
     return world;
   }
 
