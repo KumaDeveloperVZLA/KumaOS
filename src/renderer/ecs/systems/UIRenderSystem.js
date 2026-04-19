@@ -3,13 +3,13 @@ import { AppManifest }   from '../components/AppManifest.js';
 import { ProcessState }  from '../components/ProcessState.js';
 import { renderHomeScreenApps } from '../../shell/HomeScreen.js';
 import { renderDockApps }       from '../../shell/Dock.js';
+import { renderRecentApps }     from '../../shell/RecentAppsScreen.js';
 
 /**
  * UIRenderSystem — tick 'render'
  *
- * Lee las entidades AppManifest y las distribuye al HomeScreen y al Dock.
- * Pasa la referencia de ProcessState a cada app para que los clicks
- * en los íconos puedan actualizar el estado del proceso.
+ * Lee las entidades AppManifest y las distribuye al HomeScreen, Dock,
+ * y Visor de Recientes. Pasa la referencia de ProcessState a cada app.
  */
 export class UIRenderSystem extends System {
   init() {
@@ -21,8 +21,10 @@ export class UIRenderSystem extends System {
   update(tick) {
     const entities = this.appQuery.execute();
 
-    const homeApps = [];
-    const dockApps = [];
+    const homeApps   = [];
+    const dockApps   = [];
+    const recentApps = [];
+    const appsMap    = new Map();
 
     for (const entity of entities) {
       const manifest = entity.c.AppManifest;
@@ -33,9 +35,12 @@ export class UIRenderSystem extends System {
         name:           manifest.name,
         iconColorClass: manifest.iconColorClass,
         location:       manifest.location,
-        // Referencia al componente ProcessState para actualizarlo al hacer click
+        state:          proc.state,
         processState:   proc,
       };
+
+      appsMap.set(manifest.id, appData);
+      recentApps.push(appData);
 
       if (manifest.location === 'home') {
         homeApps.push(appData);
@@ -44,10 +49,12 @@ export class UIRenderSystem extends System {
       }
     }
 
-    const homeContainer = document.getElementById('home-screen-container');
-    const dockContainer = document.getElementById('dock-container');
+    const homeContainer   = document.getElementById('home-screen-container');
+    const dockContainer   = document.getElementById('dock-container');
+    const recentContainer = document.getElementById('recent-apps-container');
 
-    if (homeContainer) renderHomeScreenApps(homeContainer, homeApps);
-    if (dockContainer) renderDockApps(dockContainer, dockApps);
+    if (homeContainer)   renderHomeScreenApps(homeContainer, homeApps);
+    if (dockContainer)   renderDockApps(dockContainer, dockApps);
+    if (recentContainer) renderRecentApps(recentContainer, recentApps);
   }
 }

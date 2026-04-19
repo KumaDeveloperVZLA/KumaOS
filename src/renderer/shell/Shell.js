@@ -15,6 +15,9 @@ export function mountShell(rootElement) {
 
     <!-- Toasts de notificación: gestionados por ToastManager -->
     <div id="toast-container" class="toast-container"></div>
+
+    <!-- Visor de Recientes (Multitarea) -->
+    <div id="recent-apps-container" class="recent-apps flex items-center justify-center" style="display:none;"></div>
   `;
 
   rootElement.innerHTML = shellHTML;

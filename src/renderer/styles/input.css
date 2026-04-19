@@ -51,6 +51,13 @@
 
 .app-window--open {
   transform: translateY(0);
+  opacity: 1;
+}
+
+.app-window--paused {
+  transform: translateY(100%) scale(0.9);
+  opacity: 0;
+  pointer-events: none;
 }
 
 .app-window__header {
@@ -71,7 +78,12 @@
   color: rgba(255, 255, 255, 0.9);
 }
 
-.app-window__close-btn {
+.app-window__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.app-window__header-btn {
   width: 32px;
   height: 32px;
   border-radius: 50%;
@@ -83,11 +95,26 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.1s;
 }
 
+.app-window__header-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.app-window__header-btn:active {
+  transform: scale(0.9);
+}
+
+.app-window__min-btn {
+  font-weight: bold;
+}
+
+.app-window__close-btn {
+  background: rgba(255, 60, 60, 0.2);
+}
 .app-window__close-btn:hover {
-  background: rgba(255, 60, 60, 0.5);
+  background: rgba(255, 60, 60, 0.4);
 }
 
 .app-content {
@@ -482,5 +509,34 @@
   margin-top: 0.5rem;
   opacity: 0.7;
   font-size: 0.75rem;
+}
+
+/* ── Recent Apps (Multitarea) ───────────────────────────────────────────── */
+.recent-apps {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  opacity: 0;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.recent-apps--open {
+  opacity: 1;
+}
+
+.recent-app-card {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: slideUpFade 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes slideUpFade {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 

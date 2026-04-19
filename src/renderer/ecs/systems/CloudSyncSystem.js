@@ -1,24 +1,36 @@
 import { System } from 'ape-ecs';
 import { getFirebaseApp }  from '../../../firebase/firebaseConfig.js';
 import { getFirebaseAuth } from '../../../firebase/auth.js';
+import { rtdbGet, rtdbPost } from '../../../firebase/rtdbREST.js';
 
-// Default app layout written to Firebase on first login.
-const DEFAULT_APPS = {
-  camera:   { name: 'Camera',   iconColorClass: 'bg-red-500 shadow-red-500/50',      location: 'home', order: 0, enabled: true },
-  messages: { name: 'Messages', iconColorClass: 'bg-green-500 shadow-green-500/50',  location: 'home', order: 1, enabled: true },
-  gallery:  { name: 'Gallery',  iconColorClass: 'bg-purple-500 shadow-purple-500/50', location: 'home', order: 2, enabled: true },
-  store:    { name: 'Store',    iconColorClass: 'bg-blue-500 shadow-blue-500/50',     location: 'home', order: 3, enabled: true },
-  phone:    { name: 'Phone',    iconColorClass: 'bg-white/50', location: 'dock', order: 0, enabled: true },
-  browser:  { name: 'Browser',  iconColorClass: 'bg-white/50', location: 'dock', order: 1, enabled: true },
-  settings: { name: 'Settings', iconColorClass: 'bg-white/50', location: 'dock', order: 2, enabled: true },
-  contacts: { name: 'Contacts', iconColorClass: 'bg-white/50', location: 'dock', order: 3, enabled: true },
+// Exportado para que StoreApp pueda leer el catálogo base
+export const DEFAULT_APPS = {
+  camera:     { name: 'Camera',     iconColorClass: 'bg-red-500 shadow-red-500/50',       location: 'home', order: 0, enabled: true },
+  messages:   { name: 'Messages',   iconColorClass: 'bg-green-500 shadow-green-500/50',   location: 'home', order: 1, enabled: true },
+  gallery:    { name: 'Gallery',    iconColorClass: 'bg-purple-500 shadow-purple-500/50', location: 'home', order: 2, enabled: true },
+  phone:      { name: 'Phone',      iconColorClass: 'bg-white/50',                        location: 'dock', order: 0, enabled: true },
+  store:      { name: 'Store',      iconColorClass: 'bg-blue-500 shadow-blue-500/50',     location: 'dock', order: 1, enabled: true },
+  // Apps desinstaladas por defecto
+  browser:    { name: 'Browser',    iconColorClass: 'bg-orange-500 shadow-orange-500/50', location: 'home', order: 4, enabled: false },
+  settings:   { name: 'Settings',   iconColorClass: 'bg-slate-500 shadow-slate-500/50',   location: 'home', order: 5, enabled: false },
+  contacts:   { name: 'Contacts',   iconColorClass: 'bg-blue-400 shadow-blue-400/50',     location: 'home', order: 6, enabled: false },
+  clock:      { name: 'Clock',      iconColorClass: 'bg-black shadow-black/50',           location: 'home', order: 7, enabled: false },
+  calculator: { name: 'Calculator', iconColorClass: 'bg-orange-600 shadow-orange-600/50', location: 'home', order: 8, enabled: false },
+  calendar:   { name: 'Calendar',   iconColorClass: 'bg-red-400 shadow-red-400/50',       location: 'home', order: 9, enabled: false },
+  notes:      { name: 'Notes',      iconColorClass: 'bg-yellow-400 shadow-yellow-400/50', location: 'home', order: 10, enabled: false },
 };
 
 export class CloudSyncSystem extends System {
   init(uid) {
-    this.uid       = uid;
+    this.uid        = uid;
     this.syncActive = false;
     this.entityMap  = new Map();
+    
+    // Escuchar el evento de instalación para refrescar ECS al momento
+    document.addEventListener('appstaller:installed', (e) => {
+       const userApps = e.detail;
+       this._syncToECS(userApps);
+    });
   }
 
   update(tick) {
@@ -29,27 +41,21 @@ export class CloudSyncSystem extends System {
   }
 
   async _startSync() {
-    // Fallback inmediato: nunca dejamos el home screen vacío
     this._syncToECS(DEFAULT_APPS);
 
     try {
-      const app   = await getFirebaseApp();
-      const dbUrl = app.options.databaseURL;
-      if (!dbUrl) throw new Error('databaseURL no encontrado en la configuración de Firebase.');
-
-      const auth = await getFirebaseAuth();
-      if (!auth.currentUser) throw new Error('No hay usuario autenticado.');
-      const token = await auth.currentUser.getIdToken();
-
-      const base = `${dbUrl.replace(/\/$/, '')}/users/${this.uid}/desktop/apps.json?auth=${token}`;
-
-      const readRes = await fetch(base);
-      if (!readRes.ok) throw new Error(`HTTP ${readRes.status} — verifica las Reglas de RTDB en Firebase Console.`);
-
-      const data = await readRes.json();
+      const data = await rtdbGet(`users/${this.uid}/desktop/apps`);
 
       if (!data) {
-        // Usuario nuevo: escribir layout por defecto
+        // Fetch to root, because rtdbREST returns data
+        // Here we need PUT, but rtdbPost is POST.
+        // It's actually easier to just manually PUT with fetch as before
+        const app   = await getFirebaseApp();
+        const dbUrl = app.options.databaseURL;
+        const auth = await getFirebaseAuth();
+        const token = await auth.currentUser.getIdToken();
+        const base = `${dbUrl.replace(/\/$/, '')}/users/${this.uid}/desktop/apps.json?auth=${token}`;
+
         const writeRes = await fetch(base, {
           method:  'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -58,13 +64,10 @@ export class CloudSyncSystem extends System {
         if (!writeRes.ok) throw new Error(`Escritura fallida HTTP ${writeRes.status}.`);
         console.log('[CloudSync] Layout por defecto escrito para nuevo usuario.');
       } else {
-        // Usuario existente: MERGE con DEFAULT_APPS para que apps nuevas
-        // (añadidas en fases posteriores) no desaparezcan para usuarios ya registrados.
         const merged = { ...DEFAULT_APPS, ...data };
         this._syncToECS(merged);
         console.log('[CloudSync] Layout cargado y mergeado desde Firebase RTDB.');
       }
-
     } catch (err) {
       console.error('[CloudSync] Error de RTDB:', err.message);
       this._showError(err.message);
@@ -88,7 +91,7 @@ export class CloudSyncSystem extends System {
   _syncToECS(appsData) {
     const incoming = new Set(Object.keys(appsData));
 
-    // Eliminar entidades obsoletas o deshabilitadas
+    // Eliminar entidades obsoletas o deshabilitadas (desinstaladas)
     for (const [appId, entity] of this.entityMap) {
       if (!incoming.has(appId) || !appsData[appId].enabled) {
         entity.destroy();
@@ -101,7 +104,6 @@ export class CloudSyncSystem extends System {
       if (!appData.enabled) continue;
 
       if (this.entityMap.has(appId)) {
-        // Actualizar manifiesto
         const manifest = this.entityMap.get(appId).c.AppManifest;
         if (manifest) {
           manifest.update({
@@ -111,7 +113,6 @@ export class CloudSyncSystem extends System {
           });
         }
       } else {
-        // Crear nueva entidad con AppManifest + ProcessState + WindowTransform
         const entity = this.world.createEntity({
           c: {
             AppManifest: {

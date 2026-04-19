@@ -1,0 +1,62 @@
+# Fase 5: Ecosistema y Multitarea
+
+En esta fase completaremos el diseño original de KumaOS implementando el ecosistema de aplicaciones, verdadera gestión de memoria (multitarea) y carga dinámica de módulos para simular la instalación de software.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **Carga Dinámica:** Reemplazaremos los `imports` estáticos por `imports` dinámicos asíncronos. Esto significa que las aplicaciones consumirán 0 MB de memoria hasta que el usuario decida abrirlas por primera vez.
+
+> [!NOTE]
+> **Modelo Multitarea:** Introduciremos el estado `PAUSED`. Actualmente, presionar la 'X' de una ventana destruye la app (`STOPPED`). Añadiremos un botón de "Minimizar" que transicionará el `ProcessState` a `PAUSED`. Esto ocultará la ventana preservando su estado (ej. un texto escrito a medias o el scroll de la galería).
+
+## Proposed Changes
+
+### 1. Carga Dinámica (Dynamic Imports)
+
+#### [MODIFY] `src/renderer/ecs/systems/WindowManagerSystem.js`
+- Eliminar el objeto estático `APP_MOUNTS` con todos los imports en el cabezote del archivo.
+- Modificar el ciclo de `update`. Al detectar por primera vez una app en `state: 'RUNNING'`, ejecutar un `import()` nativo resuelto dinámicamente:
+  `const module = await import(../../../apps/${appId}/${AppId}App.js);`
+- Cachear en memoria las funciones `mount` y `unmount` devueltas por el módulo una vez cargadas.
+
+### 2. App Store (Ecosistema)
+
+#### [NEW] `src/apps/store/StoreApp.js`
+- Nueva app nativa. Interfaz que lista un catálogo de mini-aplicaciones.
+- Aplicaciones propuestas para el store: *Browser* (un simple iframe), *Settings* o *Notes*.
+- Lógica de "Instalación": Al pulsar instalar, la app:
+  1. Escribirá vía nuestra API REST (`rtdbREST.js`) en `users/{uid}/desktop/apps.json` para persistir la instalación.
+  2. Invocará al ECS (`world.createEntity`) en vivo para que el ícono aparezca instantáneamente en el Home Screen.
+
+#### [MODIFY] `src/renderer/styles/input.css`
+- Estilos para la App Store (grid de productos, botón de "Instalar", "Instalado").
+
+### 3. Multitarea y Barra de Ventanas
+
+#### [MODIFY] `src/renderer/ecs/systems/WindowManagerSystem.js`
+- Modificar la cáscara del DOM (`_createWindowShell`) para incluir un **botón Minimizar (`_`)** junto al de cerrar (`X`).
+- Minimizar actualizará el estado a `PAUSED`.
+- Si `state === 'PAUSED'`: La ventana (`.app-window`) recibe un `display: none` o un `transform` fuera de pantalla, pero **no** se invoca el `unmount()` ni se destruyen sus listeners. Su DOM se mantiene intacto.
+- Si el usuario hace clic nuevamente en el icono desde el Home Screen, el estado vuelve de `PAUSED` a `RUNNING` y la ventana vuelve a ser visible instantáneamente sin perder su contexto.
+
+#### [MODIFY] `src/renderer/shell/HomeScreen.js`
+- Actualizar el click-handler. Actualmente, si se hace click en un icono siempre intenta lanzarla de cero. Debemos asegurarnos de que la transición a `RUNNING` funcione correctamente para revivir una app `PAUSED` o `STOPPED`.
+
+---
+
+## Open Questions
+
+> [!WARNING]
+> ¿Prefieres que desarrolle un visor de apps recientes clásico (por ejemplo, apretar un botón en la barra o en el dock que muestre miniaturas de las apps pausadas) o es suficiente con que el usuario minimice la ventana y pueda "restaurar" la app cliqueando de nuevo en el icono del Home Screen?
+R = debe tener un visor de apps recientes
+> [!NOTE]
+> Dentro del **Store**, para simular cargas dinámicas crearé una pequeña App llamada `NotesApp.js` o `BrowserApp.js` que no existirá en el Home Screen por defecto, sino que deberá ser instalada primero. ¿Te parece bien?
+R = crea varias apps: Notes, Browser, Settings, Contacts, Clock, Calculator, Calendar.
+## Verification Plan
+
+### Manual Verification
+1. Abrir Messages e ingresar algo de texto sin enviar. Minimizar Messages. Al volver a abrir Messages desde el menú de inicio, el texto debe seguir ahí (Multitarea).
+2. Cerrar Messages con la "X". Al volver a abrir, el texto no debe estar y todos los listeners se habrán reciclado (Destrucción limpia).
+3. Abrir la Store, clicar "Instalar Notas". Ver como instantáneamente aparece el icono en el entorno y comprobar en Firebase console que se ha actualizado en `apps.json`.
+4. Abrir la nueva app Notas y corroborar que el chunk de JS se cargó en tiempo real vía Developer Tools.
