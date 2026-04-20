@@ -9,6 +9,8 @@
  * API pública:
  *   rtdbGet(path)           → Promise<data|null>
  *   rtdbPost(path, data)    → Promise<{name: pushId}>
+ *   rtdbPut(path, data)     → Promise<any>
+ *   rtdbDelete(path)        → Promise<any>
  *   rtdbListen(path, cb, errCb, intervalMs) → unsubscribe function
  */
 
@@ -61,6 +63,38 @@ export async function rtdbPost(path, data) {
   if (!res.ok) {
     const body = await res.text().catch(() => '');
     throw new Error(`rtdbPost HTTP ${res.status}: ${body}`);
+  }
+  return res.json();
+}
+
+/**
+ * Sobrescribe completamente un nodo (equivale a set).
+ */
+export async function rtdbPut(path, data) {
+  const url = await _buildUrl(path);
+  const res = await fetch(url, {
+    method:  'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`rtdbPut HTTP ${res.status}: ${body}`);
+  }
+  return res.json();
+}
+
+/**
+ * Elimina completamente un nodo.
+ */
+export async function rtdbDelete(path) {
+  const url = await _buildUrl(path);
+  const res = await fetch(url, {
+    method:  'DELETE'
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`rtdbDelete HTTP ${res.status}: ${body}`);
   }
   return res.json();
 }

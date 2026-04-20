@@ -9028,6 +9028,30 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     }
     return res.json();
   }
+  async function rtdbPut(path, data) {
+    const url = await _buildUrl(path);
+    const res = await fetch(url, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data)
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`rtdbPut HTTP ${res.status}: ${body}`);
+    }
+    return res.json();
+  }
+  async function rtdbDelete(path) {
+    const url = await _buildUrl(path);
+    const res = await fetch(url, {
+      method: "DELETE"
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`rtdbDelete HTTP ${res.status}: ${body}`);
+    }
+    return res.json();
+  }
   function rtdbListen(path, callback, errorCallback, intervalMs = 2e3) {
     let active = true;
     let errorFired = false;
@@ -9290,17 +9314,139 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
   });
   function mountCalculatorApp(container) {
     container.innerHTML = `
-    <div class="h-full bg-black text-white flex flex-col p-4">
-      <div class="flex-1 flex items-end justify-end pb-4 font-light text-6xl">0</div>
-      <div class="grid grid-cols-4 gap-3">
-         ${["C", "\xB1", "%", "\xF7", "7", "8", "9", "\xD7", "4", "5", "6", "-", "1", "2", "3", "+", "0", ".", "="].map((btn) => {
-      let cols = btn === "0" ? "col-span-2" : "";
-      let bg = ["\xF7", "\xD7", "-", "+", "="].includes(btn) ? "bg-orange-500" : ["C", "\xB1", "%"].includes(btn) ? "bg-gray-300 text-black" : "bg-gray-800";
-      return `<div class="${cols} ${bg} flex items-center justify-center rounded-full text-2xl font-medium aspect-square select-none cursor-pointer hover:opacity-80">${btn}</div>`;
-    }).join("")}
+    <div class="h-full bg-black text-white flex flex-col p-4 animate-fade-in" id="calc-root">
+      <div class="flex-1 flex flex-col items-end justify-end pb-4 font-light overflow-hidden">
+         <div id="calc-history" class="text-2xl text-gray-500 min-h-[32px] break-all"></div>
+         <div id="calc-display" class="text-6xl truncate w-full text-right transition-all">0</div>
       </div>
+      <div class="grid grid-cols-4 gap-3 select-none" id="calc-keypad"></div>
     </div>
   `;
+    const displayEl = container.querySelector("#calc-display");
+    const historyEl = container.querySelector("#calc-history");
+    const keypad = container.querySelector("#calc-keypad");
+    let currentVal = "0";
+    let previousVal = null;
+    let operation = null;
+    let resetNext = false;
+    const buttons = [
+      { label: "C", type: "action", color: "bg-gray-300 text-black active:bg-gray-200" },
+      { label: "\xB1", type: "action", color: "bg-gray-300 text-black active:bg-gray-200" },
+      { label: "%", type: "action", color: "bg-gray-300 text-black active:bg-gray-200" },
+      { label: "\xF7", type: "operator", color: "bg-orange-500 active:bg-orange-400" },
+      { label: "7", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "8", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "9", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "\xD7", type: "operator", color: "bg-orange-500 active:bg-orange-400" },
+      { label: "4", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "5", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "6", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "-", type: "operator", color: "bg-orange-500 active:bg-orange-400" },
+      { label: "1", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "2", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "3", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "+", type: "operator", color: "bg-orange-500 active:bg-orange-400" },
+      { label: "0", type: "number", color: "col-span-2 bg-gray-800 active:bg-gray-700 text-left pl-[25%]" },
+      { label: ".", type: "number", color: "bg-gray-800 active:bg-gray-700" },
+      { label: "=", type: "equals", color: "bg-orange-500 active:bg-orange-400" }
+    ];
+    buttons.forEach((btn) => {
+      const el = document.createElement("div");
+      el.className = `${btn.color} flex items-center justify-center rounded-full text-3xl font-medium cursor-pointer transition-all active:scale-95`;
+      if (btn.label !== "0") el.classList.add("aspect-square");
+      else el.style.aspectRatio = "2 / 0.95";
+      el.innerText = btn.label;
+      el.addEventListener("click", () => handleInput(btn.label, btn.type));
+      keypad.appendChild(el);
+    });
+    const updateUI = () => {
+      displayEl.innerText = formatNumber(currentVal);
+      if (previousVal !== null && operation) {
+        historyEl.innerText = `${formatNumber(previousVal)} ${operation}`;
+      } else {
+        historyEl.innerText = "";
+      }
+      const firstButton = keypad.firstChild;
+      if (currentVal !== "0") {
+        firstButton.innerText = "C";
+      } else {
+        firstButton.innerText = "AC";
+      }
+    };
+    const formatNumber = (numStr) => {
+      if (numStr === "Error") return numStr;
+      const parts = numStr.toString().split(".");
+      parts[0] = parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",");
+      return parts.join(".");
+    };
+    const compute = () => {
+      let p = parseFloat(previousVal);
+      let c = parseFloat(currentVal);
+      if (isNaN(p) || isNaN(c)) return;
+      let res = 0;
+      switch (operation) {
+        case "+":
+          res = p + c;
+          break;
+        case "-":
+          res = p - c;
+          break;
+        case "\xD7":
+          res = p * c;
+          break;
+        case "\xF7":
+          res = c === 0 ? "Error" : p / c;
+          break;
+      }
+      currentVal = res.toString();
+      if (currentVal.length > 12) currentVal = res.toPrecision(10).replace(/\\.0+$/, "");
+      operation = null;
+      previousVal = null;
+      resetNext = true;
+    };
+    const handleInput = (val, type) => {
+      if (currentVal === "Error") {
+        currentVal = "0";
+        previousVal = null;
+        operation = null;
+      }
+      if (type === "number") {
+        if (resetNext) {
+          currentVal = "0";
+          resetNext = false;
+        }
+        if (val === "." && currentVal.includes(".")) return;
+        if (currentVal === "0" && val !== ".") currentVal = val;
+        else if (currentVal.length < 12) currentVal += val;
+      } else if (type === "action") {
+        if (val === "C" || val === "AC") {
+          if (val === "C" && currentVal !== "0") {
+            currentVal = "0";
+          } else {
+            currentVal = "0";
+            previousVal = null;
+            operation = null;
+          }
+        } else if (val === "\xB1") {
+          currentVal = (parseFloat(currentVal) * -1).toString();
+        } else if (val === "%") {
+          currentVal = (parseFloat(currentVal) / 100).toString();
+        }
+      } else if (type === "operator") {
+        if (operation && !resetNext) {
+          compute();
+        }
+        previousVal = currentVal;
+        operation = val;
+        resetNext = true;
+      } else if (type === "equals") {
+        if (operation) {
+          compute();
+        }
+      }
+      updateUI();
+    };
+    updateUI();
   }
   function unmountCalculatorApp(container) {
     container.innerHTML = "";
@@ -9317,19 +9463,63 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     unmountCalendarApp: () => unmountCalendarApp
   });
   function mountCalendarApp(container) {
-    const d = /* @__PURE__ */ new Date();
-    container.innerHTML = `
-    <div class="h-full bg-white text-black flex flex-col">
-      <div class="p-4 bg-red-500 text-white text-center">
-         <div class="text-xl font-bold uppercase">${d.toLocaleDateString("es-ES", { month: "long" })}</div>
-         <div class="text-6xl font-light">${d.getDate()}</div>
-         <div class="text-sm mt-1">${d.toLocaleDateString("es-ES", { weekday: "long", year: "numeric" })}</div>
+    let currentDate = /* @__PURE__ */ new Date();
+    const renderCalendar = () => {
+      const year = currentDate.getFullYear();
+      const month = currentDate.getMonth();
+      const firstDay = new Date(year, month, 1).getDay();
+      const daysInMonth = new Date(year, month + 1, 0).getDate();
+      const monthName = currentDate.toLocaleDateString("es-ES", { month: "long" });
+      const today = /* @__PURE__ */ new Date();
+      let gridHtml = "";
+      ["Dom", "Lun", "Mar", "Mi\xE9", "Jue", "Vie", "S\xE1b"].forEach((day) => {
+        gridHtml += `<div class="text-center text-xs font-bold text-gray-500 py-2">${day}</div>`;
+      });
+      for (let i = 0; i < firstDay; i++) {
+        gridHtml += `<div></div>`;
+      }
+      for (let i = 1; i <= daysInMonth; i++) {
+        const isToday = i === today.getDate() && month === today.getMonth() && year === today.getFullYear();
+        const cls = isToday ? "bg-red-500 text-white font-bold shadow-md" : "text-gray-800 hover:bg-gray-200";
+        gridHtml += `
+         <div class="aspect-square flex items-center justify-center cursor-pointer p-1">
+           <div class="w-full h-full rounded-full flex items-center justify-center transition-colors ${cls}">${i}</div>
+         </div>
+       `;
+      }
+      container.innerHTML = `
+      <div class="h-full bg-white text-black flex flex-col animate-fade-in" id="calendar-root">
+        <div class="pt-8 pb-4 px-6 bg-red-500 text-white shadow-sm flex items-center justify-between">
+           <button id="cal-prev" class="w-10 h-10 flex items-center justify-center hover:bg-red-600 rounded-full transition font-bold text-xl">&lt;</button>
+           <div class="text-center">
+              <div class="text-xl font-bold uppercase tracking-wider">${monthName}</div>
+              <div class="text-sm font-light opacity-90">${year}</div>
+           </div>
+           <button id="cal-next" class="w-10 h-10 flex items-center justify-center hover:bg-red-600 rounded-full transition font-bold text-xl">&gt;</button>
+        </div>
+        <div class="flex-1 p-4 bg-gray-50 flex flex-col">
+           <div class="grid grid-cols-7 gap-x-1 gap-y-1 mb-4" id="cal-grid">
+             ${gridHtml}
+           </div>
+           <div class="flex-1 border-t border-gray-200 pt-4 overflow-y-auto">
+             <h3 class="text-sm font-bold text-gray-400 uppercase mb-3">Agenda</h3>
+             <div class="flex flex-col gap-3">
+                <p class="text-sm text-gray-500 italic text-center mt-4">Sin eventos pr\xF3ximos.</p>
+             </div>
+           </div>
+        </div>
       </div>
-      <div class="flex-1 flex items-center justify-center bg-gray-50">
-         <p class="text-gray-400">Sin eventos pr\xF3ximos.</p>
-      </div>
-    </div>
-  `;
+    `;
+      container.querySelector("#cal-prev").addEventListener("click", () => {
+        currentDate.setMonth(currentDate.getMonth() - 1);
+        renderCalendar();
+      });
+      container.querySelector("#cal-next").addEventListener("click", () => {
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        renderCalendar();
+      });
+    };
+    renderCalendar();
   }
   function unmountCalendarApp(container) {
     container.innerHTML = "";
@@ -9445,22 +9635,98 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     unmountClockApp: () => unmountClockApp
   });
   function mountClockApp(container) {
-    const updateTime = () => {
-      const el = container.querySelector("#clock-time");
-      if (el) el.innerText = (/* @__PURE__ */ new Date()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    };
     container.innerHTML = `
-    <div class="h-full bg-black text-white flex flex-col items-center justify-center">
-      <h2 class="text-gray-500 mb-2">Hora Local</h2>
-      <div id="clock-time" class="text-6xl font-light font-mono">--:--:--</div>
+    <div class="h-full bg-black text-white flex flex-col pt-8 animate-fade-in">
+      <div class="flex justify-center space-x-6 mb-8 text-sm font-semibold">
+        <button id="tab-clock" class="text-orange-500 uppercase tracking-widest border-b-2 border-orange-500 pb-1 transition-colors">Reloj</button>
+        <button id="tab-stopwatch" class="text-gray-500 uppercase tracking-widest border-b-2 border-transparent pb-1 transition-colors hover:text-gray-300">Cron\xF3metro</button>
+      </div>
+
+      <div id="view-clock" class="flex-1 flex flex-col items-center justify-center">
+        <div id="clock-time" class="text-7xl font-light font-mono">--:--</div>
+        <div id="clock-sec" class="text-2xl text-gray-400 mt-2 font-mono">--</div>
+      </div>
+
+      <div id="view-stopwatch" class="hidden flex-1 flex flex-col items-center justify-center">
+        <div id="sw-time" class="text-6xl font-light font-mono tabular-nums">00:00.00</div>
+        <div class="flex gap-4 mt-10">
+          <button id="sw-reset" class="w-20 h-20 rounded-full bg-gray-800 text-white font-medium hover:bg-gray-700 transition">Reiniciar</button>
+          <button id="sw-start" class="w-20 h-20 rounded-full bg-green-900/50 text-green-500 font-medium hover:bg-green-800/60 transition">Iniciar</button>
+        </div>
+      </div>
     </div>
   `;
-    const interval = setInterval(updateTime, 1e3);
-    updateTime();
-    container._clockInterval = interval;
+    const clockSec = container.querySelector("#clock-sec");
+    const clockTime = container.querySelector("#clock-time");
+    const updateClock = () => {
+      const d = /* @__PURE__ */ new Date();
+      clockTime.innerText = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      clockSec.innerText = d.getSeconds().toString().padStart(2, "0");
+    };
+    const clockInterval = setInterval(updateClock, 1e3);
+    updateClock();
+    const swTime = container.querySelector("#sw-time");
+    const swStart = container.querySelector("#sw-start");
+    const swReset = container.querySelector("#sw-reset");
+    let startTime = 0;
+    let elapsedTime = 0;
+    let timerInterval = null;
+    let isRunning = false;
+    const updateSwUI = () => {
+      const tempTime = elapsedTime + (isRunning ? Date.now() - startTime : 0);
+      const ms = Math.floor(tempTime % 1e3 / 10).toString().padStart(2, "0");
+      const totalSecs = Math.floor(tempTime / 1e3);
+      const s = (totalSecs % 60).toString().padStart(2, "0");
+      const m = Math.floor(totalSecs / 60).toString().padStart(2, "0");
+      swTime.innerText = `${m}:${s}.${ms}`;
+    };
+    swStart.addEventListener("click", () => {
+      if (isRunning) {
+        clearInterval(timerInterval);
+        elapsedTime += Date.now() - startTime;
+        isRunning = false;
+        swStart.innerText = "Iniciar";
+        swStart.className = "w-20 h-20 rounded-full bg-green-900/50 text-green-500 font-medium hover:bg-green-800/60 transition";
+        swReset.innerText = "Reiniciar";
+      } else {
+        startTime = Date.now();
+        timerInterval = setInterval(updateSwUI, 30);
+        isRunning = true;
+        swStart.innerText = "Pausar";
+        swStart.className = "w-20 h-20 rounded-full bg-red-900/50 text-red-500 font-medium hover:bg-red-800/60 transition";
+        swReset.innerText = "Vuelta";
+      }
+    });
+    swReset.addEventListener("click", () => {
+      if (!isRunning) {
+        elapsedTime = 0;
+        updateSwUI();
+      }
+    });
+    updateSwUI();
+    const tabClock = container.querySelector("#tab-clock");
+    const tabStopwatch = container.querySelector("#tab-stopwatch");
+    const viewClock = container.querySelector("#view-clock");
+    const viewStopwatch = container.querySelector("#view-stopwatch");
+    tabClock.addEventListener("click", () => {
+      tabClock.className = "text-orange-500 uppercase tracking-widest border-b-2 border-orange-500 pb-1 transition-colors";
+      tabStopwatch.className = "text-gray-500 uppercase tracking-widest border-b-2 border-transparent pb-1 transition-colors hover:text-gray-300";
+      viewClock.classList.remove("hidden");
+      viewStopwatch.classList.add("hidden");
+    });
+    tabStopwatch.addEventListener("click", () => {
+      tabStopwatch.className = "text-orange-500 uppercase tracking-widest border-b-2 border-orange-500 pb-1 transition-colors";
+      tabClock.className = "text-gray-500 uppercase tracking-widest border-b-2 border-transparent pb-1 transition-colors hover:text-gray-300";
+      viewStopwatch.classList.remove("hidden");
+      viewClock.classList.add("hidden");
+    });
+    container._clockIntervals = { clock: clockInterval, timer: timerInterval };
   }
   function unmountClockApp(container) {
-    clearInterval(container._clockInterval);
+    if (container._clockIntervals) {
+      clearInterval(container._clockIntervals.clock);
+      clearInterval(container._clockIntervals.timer);
+    }
     container.innerHTML = "";
   }
   var init_ClockApp = __esm({
@@ -9474,28 +9740,139 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     mountContactsApp: () => mountContactsApp,
     unmountContactsApp: () => unmountContactsApp
   });
-  function mountContactsApp(container) {
-    container.innerHTML = `
-    <div class="h-full bg-white text-black flex flex-col">
-      <div class="p-4 bg-gray-100 border-b border-gray-300">
-         <h2 class="font-bold text-2xl">Contactos</h2>
+  async function mountContactsApp(container) {
+    let contacts = {};
+    let auth = await getFirebaseAuth();
+    let uid = auth.currentUser.uid;
+    let pathBase = `users/${uid}/apps/contacts`;
+    const loadContacts = async () => {
+      try {
+        const data = await rtdbGet(pathBase);
+        contacts = data || {};
+        renderList();
+      } catch (e) {
+        console.error(e);
+        contacts = {};
+        renderList();
+      }
+    };
+    const renderList = () => {
+      let listHtml = "";
+      const keys = Object.keys(contacts).sort((a, b) => contacts[a].name.localeCompare(contacts[b].name));
+      if (keys.length === 0) {
+        listHtml = `<div class="text-center text-gray-500 mt-20">Tu agenda est\xE1 vac\xEDa.</div>`;
+      } else {
+        keys.forEach((id) => {
+          const c = contacts[id];
+          listHtml += `
+          <div class="flex items-center gap-4 p-4 border-b border-gray-100 hover:bg-gray-50 transition relative group">
+            <div class="w-12 h-12 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-xl shadow-sm">${c.name[0].toUpperCase()}</div>
+            <div class="flex-1 min-w-0">
+              <span class="text-lg font-medium text-gray-800 tracking-tight truncate block">${c.name}</span>
+              <p class="text-sm text-gray-500 truncate mt-0.5">${c.contactInfo}</p>
+            </div>
+            <button data-delete="${id}" class="text-red-400 opacity-0 group-hover:opacity-100 transition px-3 py-1 text-sm font-semibold hover:text-red-600 active:scale-95 bg-red-50 rounded-full">Borrar</button>
+          </div>
+        `;
+        });
+      }
+      container.innerHTML = `
+      <div class="h-full bg-white text-black flex flex-col relative animate-fade-in" id="contacts-root">
+        <div class="p-6 bg-gray-50 border-b border-gray-200">
+           <h2 class="font-bold text-3xl tracking-tight text-gray-800">Contactos</h2>
+        </div>
+        <div class="flex-1 overflow-y-auto">
+           ${listHtml}
+           <div class="h-20"></div> 
+        </div>
+        <button id="btn-add-contact" class="absolute bottom-6 right-6 w-14 h-14 bg-blue-500 rounded-full shadow-blue-500/30 shadow-lg flex items-center justify-center text-white text-3xl hover:bg-blue-600 transition active:scale-95">+</button>
       </div>
-      <div class="flex-1 overflow-y-auto">
-         ${["Ana", "Beto", "Carlos", "Diana", "Elena", "Fernando"].map((name4) => `
-           <div class="flex items-center gap-4 p-4 border-b border-gray-100 hover:bg-gray-50">
-             <div class="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-white font-bold">${name4[0]}</div>
-             <span class="text-lg">${name4}</span>
+    `;
+      container.querySelectorAll("[data-delete]").forEach((btn) => {
+        btn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const id = btn.getAttribute("data-delete");
+          if (confirm(`\xBFEliminar a ${contacts[id].name}?`)) {
+            try {
+              const originalHtml = btn.innerHTML;
+              btn.innerText = "...";
+              await rtdbDelete(`${pathBase}/${id}`);
+              delete contacts[id];
+              renderList();
+            } catch (e2) {
+              btn.innerText = "Error";
+            }
+          }
+        });
+      });
+      container.querySelector("#btn-add-contact").addEventListener("click", () => {
+        renderForm();
+      });
+    };
+    const renderForm = () => {
+      container.innerHTML = `
+      <div class="h-full bg-white text-black flex flex-col animate-fade-in" id="contacts-form">
+        <div class="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
+          <button id="btn-cancel" class="text-gray-500 font-medium px-2 py-1 active:opacity-50 transition">Cancelar</button>
+          <span class="font-bold text-lg">Nuevo Contacto</span>
+          <button id="btn-save" class="text-blue-600 font-bold px-2 py-1 active:opacity-50 transition">Guardar</button>
+        </div>
+        <div class="p-6 flex flex-col gap-6">
+           <div class="flex justify-center mb-4">
+              <div class="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center shadow-inner">
+                 <span class="text-4xl text-gray-400">\u{1F464}</span>
+              </div>
            </div>
-         `).join("")}
+           <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Nombre Completo</label>
+              <input type="text" id="contact-name" class="w-full bg-gray-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50 transition" placeholder="Ej. Ana Garc\xEDa" />
+           </div>
+           <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase mb-1 ml-1">Tel\xE9fono o Correo</label>
+              <input type="text" id="contact-info" class="w-full bg-gray-100 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-blue-500/50 transition" placeholder="Ej. ana@mail.com" />
+           </div>
+           <p id="contact-error" class="text-red-500 text-sm hidden text-center mt-2"></p>
+        </div>
       </div>
-    </div>
-  `;
+    `;
+      container.querySelector("#btn-cancel").addEventListener("click", () => {
+        renderList();
+      });
+      container.querySelector("#btn-save").addEventListener("click", async () => {
+        const name4 = container.querySelector("#contact-name").value.trim();
+        const info = container.querySelector("#contact-info").value.trim();
+        const err = container.querySelector("#contact-error");
+        if (!name4 || !info) {
+          err.innerText = "Debes ingresar el nombre y un dato de contacto.";
+          err.classList.remove("hidden");
+          return;
+        }
+        const btn = container.querySelector("#btn-save");
+        btn.innerText = "Guardando...";
+        btn.disabled = true;
+        try {
+          const payload = { name: name4, contactInfo: info, timestamp: Date.now() };
+          const res = await rtdbPost(pathBase, payload);
+          contacts[res.name] = payload;
+          renderList();
+        } catch (e) {
+          err.innerText = "Error al guardar en la nube.";
+          err.classList.remove("hidden");
+          btn.innerText = "Guardar";
+          btn.disabled = false;
+        }
+      });
+    };
+    container.innerHTML = `<div class="h-full bg-white flex items-center justify-center"><p class="text-gray-400 animate-pulse">Cargando contactos...</p></div>`;
+    loadContacts();
   }
   function unmountContactsApp(container) {
     container.innerHTML = "";
   }
   var init_ContactsApp = __esm({
     "src/apps/contacts/ContactsApp.js"() {
+      init_auth();
+      init_rtdbREST();
     }
   });
 
@@ -9778,19 +10155,123 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     mountNotesApp: () => mountNotesApp,
     unmountNotesApp: () => unmountNotesApp
   });
-  function mountNotesApp(container) {
-    container.innerHTML = `
-    <div class="h-full bg-[#ffffe6] text-black p-4 flex flex-col">
-      <h2 class="font-bold text-xl border-b border-black/10 pb-2 mb-4">Notas R\xE1pidas</h2>
-      <textarea class="flex-1 bg-transparent resize-none outline-none text-lg" placeholder="Escribe aqu\xED..."></textarea>
-    </div>
-  `;
+  async function mountNotesApp(container) {
+    let notes = {};
+    let currentNoteId = null;
+    let cacheTitle = "";
+    let cacheContent = "";
+    let auth = await getFirebaseAuth();
+    let uid = auth.currentUser.uid;
+    let pathBase = `users/${uid}/apps/notes`;
+    const loadNotes = async () => {
+      try {
+        const data = await rtdbGet(pathBase);
+        notes = data || {};
+        renderList();
+      } catch (e) {
+        console.error(e);
+        notes = {};
+        renderList();
+      }
+    };
+    const renderList = () => {
+      let listHtml = "";
+      const noteKeys = Object.keys(notes).reverse();
+      if (noteKeys.length === 0) {
+        listHtml = `<div class="text-center text-gray-500 mt-10">No tienes notas. Crea una nueva.</div>`;
+      } else {
+        noteKeys.forEach((id) => {
+          const n = notes[id];
+          listHtml += `
+          <div class="p-4 bg-white/50 backdrop-blur rounded-2xl shadow-sm mb-3 cursor-pointer active:scale-95 transition-transform" data-id="${id}">
+             <h3 class="font-bold text-gray-800 truncate">${n.title || "Sin t\xEDtulo"}</h3>
+             <p class="text-sm text-gray-500 truncate mt-1">${n.content || "Sin contenido"}</p>
+          </div>
+        `;
+        });
+      }
+      container.innerHTML = `
+      <div class="h-full bg-[#fdfaf6] text-black p-4 flex flex-col relative animate-fade-in">
+        <h2 class="font-bold text-3xl mb-6 text-gray-800">Notas</h2>
+        <div class="flex-1 overflow-y-auto pb-20" id="notes-list">
+          ${listHtml}
+        </div>
+        <button id="btn-add" class="absolute bottom-6 right-6 w-14 h-14 bg-yellow-400 rounded-full shadow-lg flex items-center justify-center text-white text-3xl hover:bg-yellow-500 transition active:scale-90">+</button>
+      </div>
+    `;
+      container.querySelectorAll("[data-id]").forEach((el) => {
+        el.addEventListener("click", () => {
+          currentNoteId = el.getAttribute("data-id");
+          openEditor(currentNoteId);
+        });
+      });
+      container.querySelector("#btn-add").addEventListener("click", () => {
+        currentNoteId = null;
+        openEditor(null);
+      });
+    };
+    const openEditor = (id) => {
+      const isNew = !id;
+      cacheTitle = isNew ? "" : notes[id].title;
+      cacheContent = isNew ? "" : notes[id].content;
+      container.innerHTML = `
+      <div class="h-full bg-[#ffffe6] text-black flex flex-col animate-fade-in">
+        <div class="flex items-center justify-between p-4 border-b border-black/5 bg-[#ffffe6] z-10 sticky top-0">
+          <button id="btn-back" class="text-yellow-600 font-bold px-2 py-1 active:opacity-50 transition">\u2190 Volver</button>
+          ${!isNew ? `<button id="btn-delete" class="text-red-500 font-bold text-sm px-2 py-1 active:opacity-50 transition">Eliminar</button>` : ""}
+        </div>
+        <div class="flex-1 overflow-y-auto p-4 flex flex-col">
+           <input type="text" id="note-title" class="text-2xl font-bold bg-transparent outline-none mb-4 placeholder-gray-400" placeholder="T\xEDtulo" value="${cacheTitle}" />
+           <textarea id="note-content" class="flex-1 bg-transparent resize-none outline-none text-lg placeholder-gray-400 leading-relaxed" placeholder="Escribe tu nota aqu\xED...">${cacheContent}</textarea>
+        </div>
+      </div>
+    `;
+      const titleEl = container.querySelector("#note-title");
+      const contentEl = container.querySelector("#note-content");
+      const saveNote = async () => {
+        const t = titleEl.value.trim();
+        const c = contentEl.value.trim();
+        if (!t && !c) return;
+        const noteData = { title: t, content: c, timestamp: Date.now() };
+        if (isNew) {
+          try {
+            const res = await rtdbPost(pathBase, noteData);
+            currentNoteId = res.name;
+            notes[res.name] = noteData;
+          } catch (e) {
+            console.error(e);
+          }
+        } else {
+          if (t !== cacheTitle || c !== cacheContent) {
+            await rtdbPut(`${pathBase}/${id}`, noteData);
+            notes[id] = noteData;
+          }
+        }
+      };
+      container.querySelector("#btn-back").addEventListener("click", async () => {
+        await saveNote();
+        renderList();
+      });
+      if (!isNew) {
+        container.querySelector("#btn-delete").addEventListener("click", async () => {
+          if (confirm("\xBFSeguro que deseas eliminar esta nota?")) {
+            await rtdbDelete(`${pathBase}/${id}`);
+            delete notes[id];
+            renderList();
+          }
+        });
+      }
+    };
+    container.innerHTML = `<div class="h-full bg-[#fdfaf6] flex items-center justify-center"><p class="text-gray-400 animate-pulse">Cargando notas...</p></div>`;
+    loadNotes();
   }
   function unmountNotesApp(container) {
     container.innerHTML = "";
   }
   var init_NotesApp = __esm({
     "src/apps/notes/NotesApp.js"() {
+      init_auth();
+      init_rtdbREST();
     }
   });
 
