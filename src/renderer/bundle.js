@@ -9218,22 +9218,63 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
   });
   function mountBrowserApp(container) {
     container.innerHTML = `
-    <div class="h-full bg-white flex flex-col text-black">
-      <div class="flex items-center gap-2 p-2 bg-gray-200 border-b border-gray-300">
-        <button class="px-2 font-bold text-gray-500">\u2190</button>
-        <button class="px-2 font-bold text-gray-500">\u2192</button>
-        <input type="text" value="https://kumaos.dev" class="flex-1 rounded-full px-4 py-1 text-sm bg-white" readonly />
+    <div class="h-full bg-white flex flex-col text-black" id="browser-root">
+      <div class="flex items-center gap-2 p-2 bg-gray-200 border-b border-gray-300" id="browser-nav">
+        <button class="px-2 font-bold text-gray-500 hover:text-black transition-colors" id="btn-back">\u2190</button>
+        <button class="px-2 font-bold text-gray-500 hover:text-black transition-colors" id="btn-forward">\u2192</button>
+        <form id="url-form" class="flex-1 flex">
+          <input type="text" id="url-input" value="https://google.com" class="flex-1 rounded-full px-4 py-1 text-sm bg-white border outline-none focus:ring-2 focus:ring-blue-400" />
+        </form>
       </div>
-      <div class="flex-1 flex items-center justify-center bg-gray-50">
-         <div class="text-center">
-            <span class="text-5xl">\u{1F310}</span>
-            <p class="mt-4 text-gray-500 font-medium">Buscador Web Mok</p>
-         </div>
-      </div>
+      <div id="browser-content" class="flex-1 w-full bg-white"></div>
     </div>
   `;
+    const content = container.querySelector("#browser-content");
+    const form = container.querySelector("#url-form");
+    const input = container.querySelector("#url-input");
+    const updateBounds = () => {
+      if (!content) return;
+      const rect = content.getBoundingClientRect();
+      const bounds = {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      };
+      if (window.kumaAPI && window.kumaAPI.browser) {
+        window.kumaAPI.browser.resize(bounds);
+      }
+    };
+    setTimeout(() => {
+      if (!content) return;
+      const rect = content.getBoundingClientRect();
+      const bounds = {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      };
+      if (window.kumaAPI && window.kumaAPI.browser) {
+        window.kumaAPI.browser.open(bounds, input.value);
+      }
+    }, 100);
+    window.addEventListener("resize", updateBounds);
+    container._browserResizeHandler = updateBounds;
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const val = input.value.trim();
+      if (val !== "" && window.kumaAPI && window.kumaAPI.browser) {
+        window.kumaAPI.browser.navigate(val);
+      }
+    });
   }
   function unmountBrowserApp(container) {
+    if (container._browserResizeHandler) {
+      window.removeEventListener("resize", container._browserResizeHandler);
+    }
+    if (window.kumaAPI && window.kumaAPI.browser) {
+      window.kumaAPI.browser.close();
+    }
     container.innerHTML = "";
   }
   var init_BrowserApp = __esm({

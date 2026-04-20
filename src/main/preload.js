@@ -22,5 +22,13 @@ contextBridge.exposeInMainWorld('kumaAPI', {
   storage: {
     readData: (key) => ipcRenderer.invoke('storage:read', key),
     writeData: (key, data) => ipcRenderer.invoke('storage:write', key, data)
+  },
+
+  // Browser API - Para incrustar una vista nativa del navegador
+  browser: {
+    open: (bounds, url) => ipcRenderer.invoke('browser:open', bounds, url),
+    close: () => ipcRenderer.invoke('browser:close'),
+    resize: (bounds) => ipcRenderer.invoke('browser:resize', bounds),
+    navigate: (url) => ipcRenderer.invoke('browser:navigate', url)
   }
 });
