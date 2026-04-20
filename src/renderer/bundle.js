@@ -9886,7 +9886,38 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     container.innerHTML = buildGalleryShell();
     const grid = container.querySelector("#gallery-grid");
     const emptyEl = container.querySelector("#gallery-empty");
+    const viewer = container.querySelector("#gallery-viewer");
+    const viewerImg = container.querySelector("#gallery-viewer-img");
+    const btnClose = container.querySelector("#gallery-close-viewer");
+    const btnDelete = container.querySelector("#gallery-delete-photo");
+    let selectedKey = null;
     let prevCount = -1;
+    grid.addEventListener("click", (e) => {
+      const item = e.target.closest(".gallery-item");
+      if (item) {
+        selectedKey = item.getAttribute("data-key");
+        viewerImg.src = item.getAttribute("data-url");
+        viewer.style.display = "flex";
+      }
+    });
+    btnClose.addEventListener("click", () => {
+      viewer.style.display = "none";
+      selectedKey = null;
+      viewerImg.src = "";
+    });
+    btnDelete.addEventListener("click", async () => {
+      if (!selectedKey) return;
+      if (confirm("\xBFSeguro que deseas borrar esta foto?")) {
+        viewer.style.display = "none";
+        try {
+          await rtdbDelete(`users/${uid}/gallery/${selectedKey}`);
+          selectedKey = null;
+          viewerImg.src = "";
+        } catch (err) {
+          alert("Error al borrar: " + err.message);
+        }
+      }
+    });
     _unsubscribe = rtdbListen(
       `users/${uid}/gallery`,
       (data) => {
@@ -9903,7 +9934,7 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
         prevCount = photos.length;
         emptyEl.style.display = "none";
         grid.innerHTML = photos.map((photo) => `
-        <div class="gallery-item" title="${new Date(photo.timestamp).toLocaleString()}">
+        <div class="gallery-item" data-key="${photo.key}" data-url="${photo.dataURL}" title="${new Date(photo.timestamp).toLocaleString()}" style="cursor:pointer;">
           <img
             src="${photo.dataURL}"
             alt="Foto ${new Date(photo.timestamp).toLocaleTimeString()}"
@@ -9939,6 +9970,13 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
         <span class="gallery-empty-icon">\u{1F5BC}\uFE0F</span>
         <p>No hay fotos todav\xEDa.</p>
         <p style="opacity:0.5;font-size:0.8rem;">Abre la C\xE1mara y toma una foto.</p>
+      </div>
+      <div id="gallery-viewer" style="display:none; position:absolute; top:0; left:0; width:100%; height:100%; background:black; flex-direction:column; z-index:50;">
+        <div style="display:flex; justify-content:space-between; padding:15px; background:rgba(0,0,0,0.5);">
+          <button id="gallery-close-viewer" style="color:white; background:none; border:none; font-size:1.1rem; cursor:pointer;">\u2190 Volver</button>
+          <button id="gallery-delete-photo" style="color:#ff4444; background:none; border:none; font-size:1.1rem; font-weight:bold; cursor:pointer;">Borrar</button>
+        </div>
+        <img id="gallery-viewer-img" src="" style="flex:1; object-fit:contain; max-width:100%; min-height:0; user-select:none;" />
       </div>
     </div>
   `;
