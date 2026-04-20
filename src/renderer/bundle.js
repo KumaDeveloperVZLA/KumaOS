@@ -9090,6 +9090,10 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
             const userApps = e.detail;
             this._syncToECS(userApps);
           });
+          document.addEventListener("kumaos:settings_changed", (e) => {
+            const settings = e.detail;
+            this._applySettings(settings);
+          });
         }
         update(tick) {
           if (!this.syncActive) {
@@ -9099,9 +9103,16 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
         }
         async _startSync() {
           this._syncToECS(DEFAULT_APPS);
+          this._applySettings({ theme: "dark", wallpaper: "" });
           try {
-            const data = await rtdbGet(`users/${this.uid}/desktop/apps`);
-            if (!data) {
+            const [appsData, settingsData] = await Promise.all([
+              rtdbGet(`users/${this.uid}/desktop/apps`),
+              rtdbGet(`users/${this.uid}/desktop/settings`)
+            ]);
+            if (settingsData) {
+              this._applySettings(settingsData);
+            }
+            if (!appsData) {
               const app = await getFirebaseApp();
               const dbUrl = app.options.databaseURL;
               const auth = await getFirebaseAuth();
@@ -9115,7 +9126,7 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
               if (!writeRes.ok) throw new Error(`Escritura fallida HTTP ${writeRes.status}.`);
               console.log("[CloudSync] Layout por defecto escrito para nuevo usuario.");
             } else {
-              const merged = { ...DEFAULT_APPS, ...data };
+              const merged = { ...DEFAULT_APPS, ...appsData };
               this._syncToECS(merged);
               console.log("[CloudSync] Layout cargado y mergeado desde Firebase RTDB.");
             }
@@ -9136,6 +9147,22 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
         <b>Firebase RTDB Error</b><br/>${msg}
       </div>
     `);
+        }
+        _applySettings(settings) {
+          const rootEl = document.getElementById("os-root");
+          const wpLayer = document.getElementById("wallpaper-layer");
+          if (!rootEl || !wpLayer) return;
+          if (settings.theme === "light") {
+            rootEl.classList.remove("dark");
+          } else {
+            rootEl.classList.add("dark");
+          }
+          if (settings.wallpaper) {
+            wpLayer.style.backgroundImage = `url(${settings.wallpaper})`;
+          } else {
+            wpLayer.style.backgroundImage = "none";
+            wpLayer.style.backgroundColor = "#1f2937";
+          }
         }
         _syncToECS(appsData) {
           const incoming = new Set(Object.keys(appsData));
@@ -9775,25 +9802,127 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     mountSettingsApp: () => mountSettingsApp,
     unmountSettingsApp: () => unmountSettingsApp
   });
-  function mountSettingsApp(container) {
+  async function mountSettingsApp(container, uid) {
+    _container = container;
+    _uid = uid;
     container.innerHTML = `
-    <div class="h-full bg-gray-100 text-black flex flex-col">
-      <div class="p-4 bg-gray-200 border-b border-gray-300">
-         <h2 class="font-bold text-xl text-center">Configuraci\xF3n</h2>
+    <div class="settings-app flex flex-col h-full bg-[var(--window-bg)] text-[var(--text-primary)]">
+      <div class="px-5 py-4 border-b border-[var(--glass-border)] bg-[var(--glass-bg)] z-10 flex-shrink-0 flex items-center justify-between">
+         <div class="flex items-center gap-3">
+            <span class="text-2xl">\u2699\uFE0F</span>
+            <h1 class="text-lg font-bold">Ajustes</h1>
+         </div>
       </div>
-      <div class="p-4 space-y-2 flex-1 overflow-y-auto">
-         <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200 flex justify-between"><span>Wi-Fi</span> <span class="text-blue-500">KumaNet</span></div>
-         <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200 flex justify-between"><span>Bluetooth</span> <span class="text-gray-400">Desactivado</span></div>
-         <div class="bg-white rounded-lg p-3 shadow-sm border border-gray-200 flex justify-between"><span>Pantalla</span> <span>Brillo 80%</span></div>
+      <div id="settings-content" class="flex-1 overflow-y-auto p-5 scroll-smooth">
+         <div class="flex justify-center py-10"><div class="animate-pulse text-[var(--text-secondary)]">Cargando preferencias...</div></div>
       </div>
     </div>
   `;
+    await loadSettings();
   }
-  function unmountSettingsApp(container) {
-    container.innerHTML = "";
+  function unmountSettingsApp() {
+    _container = null;
   }
+  async function loadSettings() {
+    const contentEl = _container.querySelector("#settings-content");
+    if (!contentEl) return;
+    try {
+      const data = await rtdbGet(`users/${_uid}/desktop/settings`);
+      if (data) _currentSettings = { ..._currentSettings, ...data };
+      const galleryData = await rtdbGet(`users/${_uid}/gallery`);
+      let galleryHtml = '<p class="text-[var(--text-secondary)] text-sm">Tu galer\xEDa est\xE1 vac\xEDa.</p>';
+      if (galleryData) {
+        const photos = Object.values(galleryData).sort((a, b) => b.timestamp - a.timestamp);
+        galleryHtml = `<div class="grid grid-cols-3 gap-2">` + photos.map((photo) => `
+        <div class="aspect-square bg-gray-200 rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all wallpaper-selector select-none" data-url="${photo.dataURL}">
+           <img src="${photo.dataURL}" class="w-full h-full object-cover pointer-events-none" />
+        </div>
+      `).join("") + `</div>`;
+      }
+      const defaultWallpapersHtml = `<div class="grid grid-cols-3 gap-2">` + DEFAULT_WALLPAPERS.map((url) => `
+        <div class="aspect-square bg-gray-200 rounded-lg overflow-hidden cursor-pointer hover:ring-2 hover:ring-blue-500 transition-all wallpaper-selector select-none" data-url="${url}">
+           <img src="${url}" class="w-full h-full object-cover pointer-events-none" />
+        </div>
+    `).join("") + `</div>`;
+      const isLight = _currentSettings.theme === "light";
+      contentEl.innerHTML = `
+      <div class="space-y-8 pb-10">
+        <!-- SECCI\xD3N: APARIENCIA -->
+        <section>
+          <h2 class="text-sm font-bold text-[#007aff] uppercase mb-3 px-1">Apariencia UI</h2>
+          <div class="bg-[var(--surface-color)] border border-[var(--glass-border)] rounded-2xl overflow-hidden shadow-sm">
+            <div class="p-4 flex items-center justify-between">
+              <span class="font-medium">Modo Claro</span>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="theme-toggle" class="sr-only peer" ${isLight ? "checked" : ""}>
+                <div class="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+              </label>
+            </div>
+          </div>
+        </section>
+
+        <!-- SECCI\xD3N: FONDOS POR DEFECTO -->
+        <section>
+          <h2 class="text-sm font-bold text-[#007aff] uppercase mb-3 px-1">Fondos Predefinidos</h2>
+          ${defaultWallpapersHtml}
+        </section>
+
+        <!-- SECCI\xD3N: MI GALER\xCDA -->
+        <section>
+          <h2 class="text-sm font-bold text-[#007aff] uppercase mb-3 px-1">Tus Fotos (C\xE1mara)</h2>
+          ${galleryHtml}
+        </section>
+      </div>
+    `;
+      const toggle = contentEl.querySelector("#theme-toggle");
+      toggle.addEventListener("change", async (e) => {
+        const newTheme = e.target.checked ? "light" : "dark";
+        await _updateSetting("theme", newTheme);
+      });
+      contentEl.querySelectorAll(".wallpaper-selector").forEach((el) => {
+        el.addEventListener("click", async () => {
+          const url = el.getAttribute("data-url");
+          await _updateSetting("wallpaper", url);
+          contentEl.querySelectorAll(".wallpaper-selector").forEach((w) => w.classList.remove("ring-4", "ring-blue-500"));
+          el.classList.add("ring-4", "ring-blue-500");
+        });
+      });
+    } catch (err) {
+      console.error("[SettingsApp] Error:", err);
+      contentEl.innerHTML = `<p class="text-red-400 text-center mt-10">Error de red: ${err.message}</p>`;
+    }
+  }
+  async function _updateSetting(key, value) {
+    _currentSettings[key] = value;
+    try {
+      const app = await getFirebaseApp();
+      const auth = await getFirebaseAuth();
+      const token = await auth.currentUser.getIdToken();
+      const base = `${app.options.databaseURL.replace(/\/$/, "")}/users/${_uid}/desktop/settings.json?auth=${token}`;
+      await fetch(base, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(_currentSettings)
+      });
+      document.dispatchEvent(new CustomEvent("kumaos:settings_changed", { detail: _currentSettings }));
+    } catch (e) {
+      console.error("[SettingsApp] Failed to save setting", e);
+    }
+  }
+  var _container, _uid, _currentSettings, DEFAULT_WALLPAPERS;
   var init_SettingsApp = __esm({
     "src/apps/settings/SettingsApp.js"() {
+      init_rtdbREST();
+      init_firebaseConfig();
+      init_auth();
+      _container = null;
+      _uid = null;
+      _currentSettings = { theme: "dark", wallpaper: "" };
+      DEFAULT_WALLPAPERS = [
+        "https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=400&q=80",
+        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&q=80",
+        "https://images.unsplash.com/photo-1557683316-973673baf926?w=400&q=80"
+      ];
     }
   });
 
@@ -9827,8 +9956,8 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     unmountStoreApp: () => unmountStoreApp
   });
   async function mountStoreApp(container, uid) {
-    _container = container;
-    _uid = uid;
+    _container2 = container;
+    _uid2 = uid;
     container.innerHTML = `
     <div class="store-app flex flex-col h-full bg-slate-900 text-white overflow-hidden">
       <div class="p-5 bg-blue-600 shadow-md z-10 flex-shrink-0 flex items-center gap-3">
@@ -9846,13 +9975,13 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     await loadCatalog();
   }
   function unmountStoreApp() {
-    _container = null;
+    _container2 = null;
   }
   async function loadCatalog() {
-    const contentEl = _container.querySelector("#store-content");
+    const contentEl = _container2.querySelector("#store-content");
     if (!contentEl) return;
     try {
-      const data = await rtdbGet(`users/${_uid}/desktop/apps`);
+      const data = await rtdbGet(`users/${_uid2}/desktop/apps`);
       _currentLayout = { ...DEFAULT_APPS, ...data || {} };
       const coreApps = ["store", "phone", "camera", "messages", "gallery"];
       const availableApps = Object.entries(_currentLayout).filter(([id]) => !coreApps.includes(id)).map(([id, appData]) => ({ id, ...appData }));
@@ -9896,7 +10025,7 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
       const app = await getFirebaseApp();
       const auth = await getFirebaseAuth();
       const token = await auth.currentUser.getIdToken();
-      const base = `${app.options.databaseURL.replace(/\/$/, "")}/users/${_uid}/desktop/apps.json?auth=${token}`;
+      const base = `${app.options.databaseURL.replace(/\/$/, "")}/users/${_uid2}/desktop/apps.json?auth=${token}`;
       const res = await fetch(base, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -9930,15 +10059,15 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     };
     return glyphs[id] || "\u{1F4F1}";
   }
-  var _container, _uid, _currentLayout;
+  var _container2, _uid2, _currentLayout;
   var init_StoreApp = __esm({
     "src/apps/store/StoreApp.js"() {
       init_rtdbREST();
       init_firebaseConfig();
       init_auth();
       init_CloudSyncSystem();
-      _container = null;
-      _uid = null;
+      _container2 = null;
+      _uid2 = null;
       _currentLayout = null;
     }
   });
@@ -9952,10 +10081,10 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
       if (timeEl) timeEl.textContent = timeString;
     };
     container.innerHTML = `
-    <div class="flex justify-between items-center w-full px-6 py-3 text-white text-sm font-medium drop-shadow-md">
-      <div class="time-display">--:--</div>
-      <div class="flex items-center space-x-3">
-          <span>\u{1F4F6}</span>
+    <div class="flex justify-between items-center w-full px-6 py-3 text-text-primary text-sm font-medium drop-shadow-sm transition-colors duration-300">
+      <div class="time-display text-lg tracking-wider">--:--</div>
+      <div class="flex items-center space-x-3 text-base">
+          <span class="opacity-80">\u{1F4F6}</span>
           <span>WiFi</span>
           <span>\u{1F50B} 100%</span>
       </div>
@@ -9968,22 +10097,30 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
   // src/renderer/shell/Shell.js
   function mountShell(rootElement) {
     const shellHTML = `
-    <div id="status-bar-container" class="absolute top-0 w-full z-50"></div>
+    <!-- Capa de Fondo (Wallpaper) -->
+    <div id="wallpaper-layer" class="absolute inset-0 bg-cover bg-center bg-[#222] transition-colors duration-500 z-0"></div>
 
-    <!-- HomeScreen: renderizado por UIRenderSystem -->
-    <div id="home-screen-container" class="w-full h-full flex flex-col items-center justify-center"></div>
+    <!-- UI Overlay (App Shell) con z-10 en adelante -->
+    <div id="os-root" class="absolute inset-0 z-10 flex text-text-primary font-sans transition-colors duration-300">
+      
+      <div id="status-bar-container" class="absolute top-0 w-full z-50"></div>
 
-    <!-- Dock inferior -->
-    <div id="dock-container" class="absolute bottom-6 w-full flex justify-center z-40"></div>
+      <!-- HomeScreen: renderizado por UIRenderSystem -->
+      <div id="home-screen-container" class="w-full h-full flex flex-col items-center justify-center"></div>
 
-    <!-- WindowManager: ventanas fullscreen de apps nativas (gestiona WindowManagerSystem) -->
-    <div id="window-manager" class="absolute inset-0 pointer-events-none z-30"></div>
+      <!-- Dock inferior -->
+      <div id="dock-container" class="absolute bottom-6 w-full flex justify-center z-40 pb-4"></div>
 
-    <!-- Toasts de notificaci\xF3n: gestionados por ToastManager -->
-    <div id="toast-container" class="toast-container"></div>
+      <!-- WindowManager: ventanas fullscreen de apps nativas (gestiona WindowManagerSystem) -->
+      <div id="window-manager" class="absolute inset-0 pointer-events-none z-30"></div>
 
-    <!-- Visor de Recientes (Multitarea) -->
-    <div id="recent-apps-container" class="recent-apps flex items-center justify-center" style="display:none;"></div>
+      <!-- Toasts de notificaci\xF3n: gestionados por ToastManager -->
+      <div id="toast-container" class="toast-container"></div>
+
+      <!-- Visor de Recientes (Multitarea) -->
+      <div id="recent-apps-container" class="recent-apps flex items-center justify-center" style="display:none;"></div>
+      
+    </div>
   `;
     rootElement.innerHTML = shellHTML;
     const statusBarContainer = document.getElementById("status-bar-container");
@@ -10164,10 +10301,10 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
       tabindex="0"
       aria-label="Abrir ${app.name}"
     >
-      <div class="w-16 h-16 sm:w-20 sm:h-20 ${app.iconColorClass} rounded-2xl shadow-lg border border-white/20 mb-2 transition-shadow group-hover:shadow-white/20 flex items-center justify-center">
+      <div class="w-16 h-16 sm:w-20 sm:h-20 ${app.iconColorClass} rounded-[22px] shadow-xl border border-[var(--glass-border)] mb-2 transition-transform duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] group-hover:-translate-y-1 group-hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] flex items-center justify-center">
         <span class="app-icon-glyph">${_appGlyph(app.id)}</span>
       </div>
-      <span class="text-white text-xs sm:text-sm font-medium drop-shadow-md">${app.name}</span>
+      <span class="text-text-primary text-xs sm:text-sm font-medium drop-shadow-sm">${app.name}</span>
     </div>
   `).join("");
     const fullHTML = `
@@ -10201,7 +10338,11 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
       phone: "\u{1F4DE}",
       browser: "\u{1F310}",
       settings: "\u2699\uFE0F",
-      contacts: "\u{1F465}"
+      contacts: "\u{1F465}",
+      clock: "\u23F0",
+      calculator: "\u{1F9EE}",
+      calendar: "\u{1F4C5}",
+      notes: "\u{1F4DD}"
     };
     return glyphs[id] || "\u{1F4F1}";
   }
@@ -10242,20 +10383,20 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
       <!-- App Snapshot / Icon -->
       <div 
         id="recent-resume-${app.id}"
-        class="w-32 h-48 sm:w-40 sm:h-56 rounded-2xl ${app.iconColorClass} flex items-center justify-center cursor-pointer shadow-xl transition-transform transform hover:-translate-y-2 border-2 border-white/10"
+        class="w-32 h-48 sm:w-40 sm:h-56 rounded-[22px] ${app.iconColorClass} flex items-center justify-center cursor-pointer shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] hover:-translate-y-2 border-2 border-[var(--glass-border)]"
       >
          <span class="text-4xl">${_appGlyph2(app.id)}</span>
       </div>
-      <span class="text-white text-sm font-medium drop-shadow">${app.name}</span>
+      <span class="text-text-primary text-sm font-medium drop-shadow-sm">${app.name}</span>
     </div>
   `).join("");
     const fullHTML = `
     <!-- Overlay click interceptor para cerrar -->
-    <div id="recent-apps-overlay" class="absolute inset-0 z-0"></div>
+    <div id="recent-apps-overlay" class="absolute inset-0 z-0 bg-black/40 backdrop-blur-md transition-opacity duration-300"></div>
     
     <div class="relative z-10 w-full overflow-x-auto pb-8 pt-4 px-8 hide-scrollbar">
       <div class="flex items-center gap-6 justify-start sm:justify-center min-w-max">
-        ${apps.length > 0 ? appsHTML : '<p class="text-white/50 text-lg">No hay apps recientes</p>'}
+        ${apps.length > 0 ? appsHTML : '<p class="text-[var(--text-secondary)] text-lg">No hay apps recientes</p>'}
       </div>
     </div>
   `;
@@ -10315,7 +10456,7 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
       id="dock-icon-${app.id}"
       data-app-id="${app.id}"
       title="${app.name}"
-      class="w-12 h-12 md:w-16 md:h-16 ${app.iconColorClass} rounded-2xl flex items-center justify-center transition-transform hover:scale-105 cursor-pointer shadow-lg border border-white/20"
+      class="w-12 h-12 md:w-16 md:h-16 ${app.iconColorClass} rounded-[22px] flex items-center justify-center transition-transform hover:-translate-y-1 hover:scale-105 cursor-pointer shadow-xl border border-[var(--glass-border)]"
     >
       <span class="text-2xl">${_appGlyph3(app.id)}</span>
     </div>
@@ -10324,16 +10465,16 @@ ${this.currentTick}, ${key}: ${cstat.active} active, ${cstat.pooled}/${cstat.tar
     <div
       id="dock-btn-recents"
       title="Recientes"
-      class="w-12 h-12 md:w-16 md:h-16 bg-white/10 rounded-2xl flex items-center justify-center transition-transform hover:scale-105 cursor-pointer shadow-lg border border-white/30 ml-2"
+      class="w-12 h-12 md:w-16 md:h-16 bg-[var(--surface-color)] rounded-[22px] flex items-center justify-center transition-transform hover:-translate-y-1 hover:scale-105 cursor-pointer shadow-xl border border-[var(--glass-border)] ml-2"
     >
       <span class="text-2xl">\u{1F5C2}\uFE0F</span>
     </div>
   `;
-    const contentHTML = sorted.length > 0 ? appsHTML : '<div class="text-white/50 text-sm py-2">Dock vac\xEDo</div>';
+    const contentHTML = sorted.length > 0 ? appsHTML : '<div class="text-[var(--text-secondary)] text-sm py-2">Dock vac\xEDo</div>';
     const fullHTML = `
     <div class="glass-panel rounded-[2rem] mx-auto flex justify-center items-center gap-3 px-5 py-3 w-auto max-w-2xl shadow-2xl">
       ${contentHTML}
-      <div class="w-px h-10 bg-white/20 mx-1"></div>
+      <div class="w-px h-10 bg-[var(--glass-border)] mx-1"></div>
       ${recentBtnHTML}
     </div>
   `;

@@ -7,10 +7,10 @@ export function renderStatusBar(container) {
   };
 
   container.innerHTML = `
-    <div class="flex justify-between items-center w-full px-6 py-3 text-white text-sm font-medium drop-shadow-md">
-      <div class="time-display">--:--</div>
-      <div class="flex items-center space-x-3">
-          <span>📶</span>
+    <div class="flex justify-between items-center w-full px-6 py-3 text-text-primary text-sm font-medium drop-shadow-sm transition-colors duration-300">
+      <div class="time-display text-lg tracking-wider">--:--</div>
+      <div class="flex items-center space-x-3 text-base">
+          <span class="opacity-80">📶</span>
           <span>WiFi</span>
           <span>🔋 100%</span>
       </div>

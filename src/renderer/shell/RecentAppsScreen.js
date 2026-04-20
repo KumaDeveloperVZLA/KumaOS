@@ -52,21 +52,21 @@ export function renderRecentApps(container, recentApps) {
       <!-- App Snapshot / Icon -->
       <div 
         id="recent-resume-${app.id}"
-        class="w-32 h-48 sm:w-40 sm:h-56 rounded-2xl ${app.iconColorClass} flex items-center justify-center cursor-pointer shadow-xl transition-transform transform hover:-translate-y-2 border-2 border-white/10"
+        class="w-32 h-48 sm:w-40 sm:h-56 rounded-[22px] ${app.iconColorClass} flex items-center justify-center cursor-pointer shadow-xl transition-transform duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] hover:-translate-y-2 border-2 border-[var(--glass-border)]"
       >
          <span class="text-4xl">${_appGlyph(app.id)}</span>
       </div>
-      <span class="text-white text-sm font-medium drop-shadow">${app.name}</span>
+      <span class="text-text-primary text-sm font-medium drop-shadow-sm">${app.name}</span>
     </div>
   `).join('');
 
   const fullHTML = `
     <!-- Overlay click interceptor para cerrar -->
-    <div id="recent-apps-overlay" class="absolute inset-0 z-0"></div>
+    <div id="recent-apps-overlay" class="absolute inset-0 z-0 bg-black/40 backdrop-blur-md transition-opacity duration-300"></div>
     
     <div class="relative z-10 w-full overflow-x-auto pb-8 pt-4 px-8 hide-scrollbar">
       <div class="flex items-center gap-6 justify-start sm:justify-center min-w-max">
-        ${apps.length > 0 ? appsHTML : '<p class="text-white/50 text-lg">No hay apps recientes</p>'}
+        ${apps.length > 0 ? appsHTML : '<p class="text-[var(--text-secondary)] text-lg">No hay apps recientes</p>'}
       </div>
     </div>
   `;

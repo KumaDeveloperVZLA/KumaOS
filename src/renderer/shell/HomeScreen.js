@@ -20,10 +20,10 @@ export function renderHomeScreenApps(container, apps) {
       tabindex="0"
       aria-label="Abrir ${app.name}"
     >
-      <div class="w-16 h-16 sm:w-20 sm:h-20 ${app.iconColorClass} rounded-2xl shadow-lg border border-white/20 mb-2 transition-shadow group-hover:shadow-white/20 flex items-center justify-center">
+      <div class="w-16 h-16 sm:w-20 sm:h-20 ${app.iconColorClass} rounded-[22px] shadow-xl border border-[var(--glass-border)] mb-2 transition-transform duration-300 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] group-hover:-translate-y-1 group-hover:shadow-[0_10px_20px_rgba(0,0,0,0.3)] flex items-center justify-center">
         <span class="app-icon-glyph">${_appGlyph(app.id)}</span>
       </div>
-      <span class="text-white text-xs sm:text-sm font-medium drop-shadow-md">${app.name}</span>
+      <span class="text-text-primary text-xs sm:text-sm font-medium drop-shadow-sm">${app.name}</span>
     </div>
   `).join('');
 
@@ -71,6 +71,10 @@ function _appGlyph(id) {
     browser:  '🌐',
     settings: '⚙️',
     contacts: '👥',
+    clock:    '⏰',
+    calculator:'🧮',
+    calendar: '📅',
+    notes:    '📝'
   };
   return glyphs[id] || '📱';
 }

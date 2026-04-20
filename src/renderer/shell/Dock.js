@@ -11,7 +11,7 @@ export function renderDockApps(container, apps) {
       id="dock-icon-${app.id}"
       data-app-id="${app.id}"
       title="${app.name}"
-      class="w-12 h-12 md:w-16 md:h-16 ${app.iconColorClass} rounded-2xl flex items-center justify-center transition-transform hover:scale-105 cursor-pointer shadow-lg border border-white/20"
+      class="w-12 h-12 md:w-16 md:h-16 ${app.iconColorClass} rounded-[22px] flex items-center justify-center transition-transform hover:-translate-y-1 hover:scale-105 cursor-pointer shadow-xl border border-[var(--glass-border)]"
     >
       <span class="text-2xl">${_appGlyph(app.id)}</span>
     </div>
@@ -22,18 +22,18 @@ export function renderDockApps(container, apps) {
     <div
       id="dock-btn-recents"
       title="Recientes"
-      class="w-12 h-12 md:w-16 md:h-16 bg-white/10 rounded-2xl flex items-center justify-center transition-transform hover:scale-105 cursor-pointer shadow-lg border border-white/30 ml-2"
+      class="w-12 h-12 md:w-16 md:h-16 bg-[var(--surface-color)] rounded-[22px] flex items-center justify-center transition-transform hover:-translate-y-1 hover:scale-105 cursor-pointer shadow-xl border border-[var(--glass-border)] ml-2"
     >
       <span class="text-2xl">🗂️</span>
     </div>
   `;
 
-  const contentHTML = sorted.length > 0 ? appsHTML : '<div class="text-white/50 text-sm py-2">Dock vacío</div>';
+  const contentHTML = sorted.length > 0 ? appsHTML : '<div class="text-[var(--text-secondary)] text-sm py-2">Dock vacío</div>';
 
   const fullHTML = `
     <div class="glass-panel rounded-[2rem] mx-auto flex justify-center items-center gap-3 px-5 py-3 w-auto max-w-2xl shadow-2xl">
       ${contentHTML}
-      <div class="w-px h-10 bg-white/20 mx-1"></div>
+      <div class="w-px h-10 bg-[var(--glass-border)] mx-1"></div>
       ${recentBtnHTML}
     </div>
   `;

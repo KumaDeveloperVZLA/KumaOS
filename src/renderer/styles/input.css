@@ -4,19 +4,27 @@
 
 @layer base {
   :root {
-    --os-bg-color: #000;
-    --text-primary: #fff;
+    /* DEFAULT (Light Mode) */
+    --text-primary: #111111;
+    --text-secondary: rgba(0, 0, 0, 0.7);
+    --glass-bg: rgba(255, 255, 255, 0.45);
+    --glass-border: rgba(255, 255, 255, 0.5);
+    --blur-amount: 24px;
+    --window-bg: #f8f9fa;
+  }
+
+  .dark {
+    /* DARK MODE */
+    --text-primary: #ffffff;
     --text-secondary: rgba(255, 255, 255, 0.7);
-    --accent-color: #007aff;
-    --surface-color: rgba(255, 255, 255, 0.1);
-    --glass-bg: rgba(30, 30, 30, 0.65);
+    --glass-bg: rgba(20, 20, 25, 0.65);
     --glass-border: rgba(255, 255, 255, 0.1);
-    --blur-amount: 20px;
+    --blur-amount: 24px;
+    --window-bg: #0a0a0f;
   }
 
   body {
-    @apply m-0 flex justify-center items-center h-screen overflow-hidden select-none bg-[#222] text-text-primary;
-    /* font-family resolves from tailwind config sans extending */
+    @apply m-0 flex justify-center items-center h-screen overflow-hidden select-none bg-black;
   }
 }
 
@@ -27,6 +35,7 @@
     backdrop-filter: blur(var(--blur-amount));
     -webkit-backdrop-filter: blur(var(--blur-amount));
     border: 1px solid var(--glass-border);
+    transition: background 0.3s ease, border-color 0.3s ease;
   }
 }
 
@@ -40,12 +49,12 @@
   inset: 0;
   display: flex;
   flex-direction: column;
-  background: #0a0a0f;
-  color: #fff;
-  z-index: 1; /* stacking within the window-manager container */
-  pointer-events: auto; /* ensure close btn and app UI are always clickable */
+  background: var(--window-bg);
+  color: var(--text-primary);
+  z-index: 1; 
+  pointer-events: auto;
   transform: translateY(100%);
-  transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+  transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.3s ease;
   overflow: hidden;
 }
 

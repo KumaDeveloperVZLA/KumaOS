@@ -31,6 +31,12 @@ export class CloudSyncSystem extends System {
        const userApps = e.detail;
        this._syncToECS(userApps);
     });
+
+    // Escuchar el evento de cambio de ajustes
+    document.addEventListener('kumaos:settings_changed', (e) => {
+       const settings = e.detail;
+       this._applySettings(settings);
+    });
   }
 
   update(tick) {
@@ -42,11 +48,19 @@ export class CloudSyncSystem extends System {
 
   async _startSync() {
     this._syncToECS(DEFAULT_APPS);
+    this._applySettings({ theme: 'dark', wallpaper: '' }); // default optimista
 
     try {
-      const data = await rtdbGet(`users/${this.uid}/desktop/apps`);
+      const [appsData, settingsData] = await Promise.all([
+         rtdbGet(`users/${this.uid}/desktop/apps`),
+         rtdbGet(`users/${this.uid}/desktop/settings`)
+      ]);
 
-      if (!data) {
+      if (settingsData) {
+         this._applySettings(settingsData);
+      }
+
+      if (!appsData) {
         // Fetch to root, because rtdbREST returns data
         // Here we need PUT, but rtdbPost is POST.
         // It's actually easier to just manually PUT with fetch as before
@@ -64,7 +78,7 @@ export class CloudSyncSystem extends System {
         if (!writeRes.ok) throw new Error(`Escritura fallida HTTP ${writeRes.status}.`);
         console.log('[CloudSync] Layout por defecto escrito para nuevo usuario.');
       } else {
-        const merged = { ...DEFAULT_APPS, ...data };
+        const merged = { ...DEFAULT_APPS, ...appsData };
         this._syncToECS(merged);
         console.log('[CloudSync] Layout cargado y mergeado desde Firebase RTDB.');
       }
@@ -86,6 +100,26 @@ export class CloudSyncSystem extends System {
         <b>Firebase RTDB Error</b><br/>${msg}
       </div>
     `);
+  }
+
+  _applySettings(settings) {
+    const rootEl = document.getElementById('os-root');
+    const wpLayer = document.getElementById('wallpaper-layer');
+    if (!rootEl || !wpLayer) return;
+
+    if (settings.theme === 'light') {
+       rootEl.classList.remove('dark');
+       // En caso de querer aplicar la clase .light o dependemos de la omision de .dark
+    } else {
+       rootEl.classList.add('dark');
+    }
+
+    if (settings.wallpaper) {
+       wpLayer.style.backgroundImage = `url(${settings.wallpaper})`;
+    } else {
+       wpLayer.style.backgroundImage = 'none';
+       wpLayer.style.backgroundColor = '#1f2937'; // slate-800 default si no hay paper
+    }
   }
 
   _syncToECS(appsData) {
